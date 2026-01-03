@@ -1,0 +1,9 @@
+{
+  "name": "agentstore",
+  "version": "0.1.0",
+  "description": "AgentStore - Claude Code Plugin Marketplace with x402 payments",
+  "author": "techgangboss",
+  "commands": "${CLAUDE_PLUGIN_ROOT}/commands",
+  "skills": "${CLAUDE_PLUGIN_ROOT}/skills",
+  "agents": "${CLAUDE_PLUGIN_ROOT}/agents"
+}
