@@ -103,7 +103,7 @@ class AgentStoreGateway {
       throw new Error(`MCP call failed: ${response.status} ${response.statusText}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as { result?: unknown };
     return result.result;
   }
 }
