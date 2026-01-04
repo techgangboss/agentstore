@@ -1,53 +1,90 @@
 ---
-description: Manage your AgentStore wallet
+description: Manage your AgentStore wallet for x402 payments
 arguments:
   - name: action
-    description: "Action: balance, add-funds, history, settings"
+    description: "Action: status, setup, fund, history, limits"
     required: false
 ---
 
 # AgentStore Wallet
 
-Manage your local wallet for x402 payments.
+Manage your local wallet for x402 payments on Base network.
 
 ## Instructions
 
-Based on the action parameter:
+Based on the action parameter (default: status):
 
-### balance (default)
-1. Read wallet from ~/.agentstore/wallet.json
-2. Display:
-   - Wallet address
-   - USDC balance
-   - Network (Base mainnet)
-   - Spend limits remaining
+### status
+1. Check if wallet exists at `~/.agentstore/wallet.json`
+2. If exists, display:
+   ```
+   ## AgentStore Wallet
 
-### add-funds
-1. Generate a deposit QR code/address
-2. Or initiate Coinbase Onramp flow (opens browser)
-3. Monitor for incoming transaction
-4. Update balance when confirmed
+   **Address:** 0x...
+   **Network:** Base (Chain ID: 8453)
+   **USDC Balance:** $X.XX
+
+   **Spend Limits:**
+   - Per transaction: $50.00
+   - Daily: $100.00 (remaining: $X.XX)
+   - Weekly: $500.00 (remaining: $X.XX)
+   ```
+3. If no wallet: "No wallet configured. Run `/wallet setup` to create one."
+
+### setup
+1. Ask user: "Create a new wallet or import existing?"
+2. For new wallet:
+   - Generate new keypair using viem
+   - Encrypt private key with password
+   - Save to `~/.agentstore/wallet.json`
+   - Display address and backup seed phrase warning
+3. For import:
+   - Prompt for private key or seed phrase
+   - Encrypt and save
+4. Set default spend limits
+
+### fund
+1. Display wallet address for deposits
+2. Show QR code if possible
+3. Provide link to Coinbase for purchasing USDC on Base:
+   ```
+   To add funds:
+   1. Send USDC (Base network) to: 0x...
+   2. Or use Coinbase: https://www.coinbase.com/
+
+   Minimum recommended: $10.00 USDC
+   ```
 
 ### history
-1. List recent transactions
-2. Show: date, agent, amount, status
+1. Read transaction history from local storage
+2. Display recent purchases:
+   ```
+   ## Transaction History
 
-### settings
-1. Display/update spend controls:
-   - Per-transaction limit
-   - Daily limit
-   - Weekly limit
-   - Allowed publishers (allowlist)
+   | Date | Agent | Amount | Status |
+   |------|-------|--------|--------|
+   | Jan 3 | SQL Expert | $5.00 | Confirmed |
+   ```
 
-## Wallet Location
+### limits
+1. Display current spend limits
+2. Ask if user wants to modify:
+   - Per-transaction limit (default $50)
+   - Daily limit (default $100)
+   - Weekly limit (default $500)
+3. Save updated limits
+
+## Files
 
 ```
-~/.agentstore/wallet.json (encrypted)
-~/.agentstore/wallet.keystore
+~/.agentstore/
+  wallet.json      # Encrypted wallet config
+  history.json     # Transaction history
+  entitlements/    # Stored entitlement tokens
 ```
 
-## Security
+## Security Notes
 
-- Private key never leaves local machine
-- Encrypted at rest with OS keychain
-- Spend limits enforced locally
+- Private key encrypted with AES-256-GCM
+- Never transmitted over network
+- Spend limits enforced client-side before signing

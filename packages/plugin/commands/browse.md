@@ -5,7 +5,7 @@ arguments:
     description: Search query (optional)
     required: false
   - name: category
-    description: Filter by category (optional)
+    description: Filter by category (e.g., productivity, database, code-quality)
     required: false
 ---
 
@@ -15,28 +15,58 @@ Search and browse available agents in the AgentStore marketplace.
 
 ## Instructions
 
-1. Fetch the agent catalog from the AgentStore API
-2. If a search query is provided, filter results
-3. Display agents in a formatted list showing:
-   - Agent name and description
-   - Publisher
-   - Price (free or USDC amount)
-   - Category/tags
-4. Offer to show details for any agent using `/agent-info`
+1. Use WebFetch to call the AgentStore API:
+   ```
+   GET https://api-inky-seven.vercel.app/api/agents
+   ```
+   Add query params if provided: `?search={query}&tag={category}`
 
-## API Endpoint
+2. Parse the JSON response and display agents in a clean format
 
-```
-GET https://api.agentstore.dev/v1/agents
-Query params: ?q={query}&category={category}&limit=20
-```
+3. For each agent show:
+   - Name and version
+   - Publisher name
+   - Description (truncated to ~100 chars)
+   - Type: "Open Source" or "Proprietary"
+   - Price: "FREE" or "$X.XX"
+   - Tags as badges
+
+4. After listing, ask if user wants to:
+   - See details for a specific agent
+   - Install an agent with `/install-agent {agent_id}`
+   - Filter by different category
 
 ## Display Format
 
-For each agent, show:
 ```
-{name} by {publisher}
+## AgentStore Marketplace
+
+### {name} v{version}
+by {publisher} | {type}
 {description}
-Price: {price} | Tags: {tags}
+**Price:** {FREE or $X.XX} | **Tags:** {tags}
+
 ---
+```
+
+## Example Output
+
+```
+## AgentStore Marketplace
+
+### Code Reviewer v1.0.0
+by TechGang Boss | Open Source
+AI-powered code review agent that analyzes your code for bugs and security issues.
+**Price:** FREE | **Tags:** code-quality, productivity
+
+---
+
+### SQL Expert v1.0.0
+by TechGang Boss | Proprietary
+Expert SQL agent that writes optimized queries and explains execution plans.
+**Price:** $5.00 | **Tags:** database, productivity
+
+---
+
+Found 2 agents. Use `/install-agent {agent_id}` to install.
 ```
