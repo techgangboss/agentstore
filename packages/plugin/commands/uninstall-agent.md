@@ -2,61 +2,39 @@
 description: Uninstall an agent from AgentStore
 arguments:
   - name: agent_id
-    description: The agent ID to uninstall (e.g., acme.research-agent)
+    description: The agent ID to uninstall (e.g., techgangboss.wallet-assistant)
     required: true
 ---
 
 # Uninstall Agent
 
-Remove an installed agent from your local AgentStore configuration.
+Remove an installed agent using the CLI.
 
 ## Instructions
 
-1. Read `~/.agentstore/routes.json`
-2. Find and remove all entries matching the agent_id
-3. Write updated routes back to file
-4. Read `~/.agentstore/entitlements.json`
-5. Find and remove entitlement for this agent
-6. Write updated entitlements back to file
-7. Remove skill file from `.claude/skills/agentstore/{agent_id}.md`
+Run the AgentStore CLI:
 
-## Confirmation Flow
-
-```
-## Uninstalling: {agent_id}
-
-This will remove:
-- {N} gateway routes
-- {N} tools: {tool_list}
-- Entitlement token (if any)
-- Local skill file
-
-Note: This does NOT refund any payments. Entitlements remain valid
-on the marketplace if you reinstall later.
-
-Proceed? (y/n)
+```bash
+node /Users/zion/agentstore/packages/cli/dist/index.js uninstall {agent_id}
 ```
 
-## After Uninstall
+This will:
+1. Remove gateway routes from `~/.agentstore/routes.json`
+2. Remove entitlement from `~/.agentstore/entitlements.json` (if any)
+3. Delete skill file from `~/.claude/skills/agentstore/`
 
-```
-✓ Uninstalled {agent_id}
+## Example
 
-Removed:
-- {N} tools from gateway
-- Entitlement token
-- Skill file
-
-The agent's tools are no longer available. You can reinstall
-anytime with `/install-agent {agent_id}`.
+```bash
+node /Users/zion/agentstore/packages/cli/dist/index.js uninstall techgangboss.wallet-assistant
 ```
 
-## If Agent Not Found
-
+Output:
 ```
-Agent "{agent_id}" is not installed.
+  ✓ Removed routes from /Users/zion/.agentstore/routes.json
+  ✓ Removed skill file: /Users/zion/.claude/skills/agentstore/techgangboss-wallet-assistant.md
 
-Run `/my-agents` to see installed agents.
+✅ Uninstalled: techgangboss.wallet-assistant
 ```
 
 ## Notes
