@@ -163,20 +163,19 @@ agentstore wallet fund --no-open
 ```
 
 ### How It Works
-1. CLI requests a secure session token from the API
+1. CLI calls the API to generate an onramp URL with your wallet address
 2. Opens Coinbase Onramp in your browser with pre-filled wallet address
 3. Complete purchase with credit card, Apple Pay, or bank transfer
 4. ETH arrives in your wallet within minutes
 
 ### Server Configuration (Vercel)
-To enable fiat onramp, add Coinbase CDP credentials to Vercel:
+To enable fiat onramp, add the CDP Client Key to Vercel:
 
 ```
-CDP_API_KEY_NAME=organizations/.../apiKeys/...
-CDP_API_KEY_PRIVATE_KEY=-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----
+CDP_CLIENT_KEY=your-client-key-here
 ```
 
-Get CDP credentials at: https://portal.cdp.coinbase.com/
+Get your Client Key from: https://portal.cdp.coinbase.com/ (API Keys tab)
 
 ## Environment Variables
 
@@ -186,6 +185,7 @@ SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_KEY=eyJ...
 PLATFORM_FEE_ADDRESS=0x...
+CDP_CLIENT_KEY=xxx...                           # Coinbase Onramp client key
 UPSTASH_REDIS_REST_URL=https://xxx.upstash.io   # Optional - enables persistent rate limiting
 UPSTASH_REDIS_REST_TOKEN=AXxx...                # Optional - falls back to in-memory if not set
 ```
