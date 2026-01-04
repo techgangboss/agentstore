@@ -1,0 +1,27 @@
+{
+  "name": "@agentstore/wallet-agent",
+  "version": "1.0.0",
+  "description": "MCP server for AgentStore wallet queries - balance, transactions, spending stats",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "wallet-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
