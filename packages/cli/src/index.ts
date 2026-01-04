@@ -361,6 +361,128 @@ async function createNewWallet(): Promise<{ address: string }> {
   return { address: account.address };
 }
 
+// Create wallet silently (for lazy creation during install)
+async function ensureWalletExists(): Promise<{ address: string; created: boolean }> {
+  if (walletExists()) {
+    const config = loadWalletConfig();
+    return { address: config!.address, created: false };
+  }
+
+  // Create wallet silently
+  ensureDirectories();
+  const privateKey = generatePrivateKey();
+  const account = privateKeyToAccount(privateKey);
+
+  const config: WalletConfig = {
+    address: account.address,
+    createdAt: new Date().toISOString(),
+    network: 'mainnet',
+    rpcEndpoint: MEV_COMMIT_RPC,
+    spendLimits: {
+      perTransaction: 100,
+      daily: 500,
+      weekly: 2000,
+    },
+    allowedPublishers: [],
+  };
+
+  const password = await getOrCreatePassword();
+  const encrypted = encryptKey(privateKey, password);
+
+  fs.writeFileSync(KEYSTORE_FILE, JSON.stringify(encrypted), { mode: 0o600 });
+  fs.writeFileSync(WALLET_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+  fs.writeFileSync(TX_HISTORY_FILE, JSON.stringify([]), { mode: 0o600 });
+
+  return { address: account.address, created: true };
+}
+
+// Trigger funding flow and wait for funds
+async function triggerFundingFlow(requiredUsd: number): Promise<boolean> {
+  const config = loadWalletConfig();
+  if (!config) return false;
+
+  console.log('\n💳 Opening Coinbase to fund your wallet...\n');
+  console.log(`   Wallet: ${config.address}`);
+  console.log(`   Required: ~$${requiredUsd} USD\n`);
+
+  // Get initial balance
+  const initialBalance = await publicClient.getBalance({
+    address: config.address as `0x${string}`,
+  });
+
+  // Get onramp URL from API
+  const response = await fetch(`${API_BASE}/api/onramp/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      wallet_address: config.address,
+      amount_usd: Math.ceil(requiredUsd * 1.1), // Add 10% buffer for gas
+    }),
+  });
+
+  const result = await response.json() as {
+    success?: boolean;
+    onramp_url?: string;
+    error?: string;
+    manual_instructions?: { step1: string; step2: string; step3: string };
+  };
+
+  if (!response.ok || !result.success) {
+    if (result.manual_instructions) {
+      console.log('⚠️  Coinbase Onramp not configured.\n');
+      console.log('   Manual funding instructions:');
+      console.log(`   1. ${result.manual_instructions.step1}`);
+      console.log(`   2. ${result.manual_instructions.step2}`);
+      console.log(`   3. ${result.manual_instructions.step3}`);
+      console.log(`\n   Your wallet address: ${config.address}`);
+      console.log('\n   After funding, run the install command again.');
+    }
+    return false;
+  }
+
+  // Open browser
+  const { exec } = await import('child_process');
+  const openCmd = process.platform === 'darwin'
+    ? `open "${result.onramp_url}"`
+    : process.platform === 'win32'
+      ? `start "${result.onramp_url}"`
+      : `xdg-open "${result.onramp_url}"`;
+
+  exec(openCmd);
+  console.log('🌐 Coinbase opened in your browser.\n');
+  console.log('   Complete the purchase, then wait for funds to arrive.');
+  console.log('⏳ Waiting for funds (Ctrl+C to cancel)...\n');
+
+  // Poll for balance
+  const startTime = Date.now();
+  const maxWaitTime = 10 * 60 * 1000; // 10 minutes
+  const pollInterval = 10 * 1000; // 10 seconds
+
+  while (Date.now() - startTime < maxWaitTime) {
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
+    try {
+      const currentBalance = await publicClient.getBalance({
+        address: config.address as `0x${string}`,
+      });
+
+      if (currentBalance > initialBalance) {
+        const added = currentBalance - initialBalance;
+        console.log(`\n✅ Funds received! +${formatEther(added)} ETH\n`);
+        return true;
+      }
+
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      process.stdout.write(`\r   Checking balance... (${elapsed}s elapsed)`);
+    } catch {
+      // Ignore poll errors
+    }
+  }
+
+  console.log('\n⚠️  Timeout waiting for funds. Run install again after funding.');
+  return false;
+}
+
 // Get wallet balance
 async function getWalletBalance(): Promise<{ eth: string; usd: number }> {
   const config = loadWalletConfig();
@@ -676,14 +798,14 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
   let expiresAt: string | null = null;
 
   if (agent.type === 'proprietary' && agent.pricing.model !== 'free') {
-    const wallet = loadWalletConfig();
-
-    if (!wallet) {
-      console.log('\n⚠️  This is a paid agent ($' + agent.pricing.amount + ')');
-      console.log('   No wallet configured. Run: agentstore wallet setup');
-      process.exit(1);
+    // Lazy wallet creation - create if doesn't exist
+    const { address: walletAddress, created: walletCreated } = await ensureWalletExists();
+    if (walletCreated) {
+      console.log('\n🔐 Wallet created automatically');
+      console.log(`   Address: ${walletAddress}`);
     }
 
+    const wallet = loadWalletConfig()!;
     const ethPrice = await getEthPrice();
     const priceEth = agent.pricing.amount / ethPrice;
 
@@ -711,14 +833,28 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
           process.exit(1);
         }
 
-        // Check balance
+        // Check balance and trigger funding if needed
         try {
           const balance = await getWalletBalance();
           console.log(`\n   Your balance: ${balance.eth} ETH ($${balance.usd})`);
 
+          // Auto-trigger funding flow if insufficient balance
           if (balance.usd < agent.pricing.amount) {
-            console.log(`\n❌ Insufficient balance. Need $${agent.pricing.amount}, have $${balance.usd}`);
-            process.exit(1);
+            console.log(`\n⚠️  Insufficient balance. Need $${agent.pricing.amount}, have $${balance.usd}`);
+
+            const funded = await triggerFundingFlow(agent.pricing.amount);
+            if (!funded) {
+              process.exit(1);
+            }
+
+            // Re-check balance after funding
+            const newBalance = await getWalletBalance();
+            console.log(`   New balance: ${newBalance.eth} ETH ($${newBalance.usd})`);
+
+            if (newBalance.usd < agent.pricing.amount) {
+              console.log(`\n❌ Still insufficient. Need $${agent.pricing.amount}, have $${newBalance.usd}`);
+              process.exit(1);
+            }
           }
         } catch (error) {
           console.log(`\n❌ Could not check balance: ${error instanceof Error ? error.message : error}`);

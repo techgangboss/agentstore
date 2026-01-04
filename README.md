@@ -31,32 +31,7 @@ node packages/cli/dist/index.js gateway-setup
 # Restart Claude Code to load the gateway MCP server
 ```
 
-### Step 2: Create a Wallet
-```bash
-# From Claude Code, run:
-agentstore wallet setup
-
-# Or use the slash command:
-/wallet setup
-```
-- Generates Ethereum keypair locally
-- Encrypts private key with AES-256-GCM
-- Stores password in OS keychain (macOS Keychain / Linux Secret Service)
-- Sets default spend limits ($100/tx, $500/day, $2000/week)
-
-### Step 3: Fund the Wallet
-```bash
-# Open Coinbase Onramp in browser
-agentstore wallet fund --amount 50
-
-# Or use the slash command:
-/wallet fund
-```
-- Opens Coinbase with pre-filled wallet address
-- Pay with credit card, Apple Pay, or bank transfer
-- ETH arrives in wallet within minutes
-
-### Step 4: Browse the Marketplace
+### Step 2: Browse the Marketplace
 ```bash
 agentstore browse
 
@@ -67,49 +42,39 @@ agentstore browse
 - Filter by category or search query
 - Shows publisher, version, and tools
 
-### Step 5: Install an Agent
-
-**For FREE agents:**
+### Step 3: Install an Agent
 ```bash
-agentstore install publisher.agent-name
-```
-
-**For PAID agents:**
-```bash
-# Auto-pay from wallet
 agentstore install publisher.agent-name --pay
-
-# Or manual payment + verification
-agentstore install publisher.agent-name --tx-hash 0x...
 ```
 
-**What happens:**
-1. CLI fetches agent manifest from API
-2. Validates spend limits (if paid)
-3. Signs and sends ETH transaction to publisher
-4. API verifies payment on-chain (with mev-commit preconfirmations)
-5. Returns entitlement token
-6. Writes gateway routes to `~/.agentstore/routes.json`
-7. Saves entitlement to `~/.agentstore/entitlements.json`
-8. Creates skill file in `~/.claude/skills/agentstore/`
+**For FREE agents:** Installs immediately.
 
-### Step 6: Use the Agent
+**For PAID agents with insufficient funds:**
+1. **Auto-create wallet** (if none exists) — generates keypair silently in background
+2. **Trigger funding** — opens Coinbase Onramp with pre-filled wallet address
+3. **Wait for funds** — polls balance until ETH arrives
+4. **Confirm transaction** — prompts user to approve spend
+5. **Send payment** — signs and broadcasts ETH transaction
+6. **Verify on-chain** — API confirms payment via mev-commit (~100ms)
+7. **Complete install** — writes routes, entitlements, and skill files
+
+The entire flow is triggered automatically when you try to install a paid agent. No separate wallet setup required.
+
+### Step 4: Use the Agent
 After installation, the agent's tools are immediately available in Claude Code:
 - Gateway MCP server routes tool calls to publisher endpoints
 - Auth tokens attached automatically for paid agents
 - No restart required — tools appear instantly
 
-### Step 7: Manage Agents
+### Managing Agents
 ```bash
 # List installed agents
 agentstore list
-/my-agents
 
 # Uninstall an agent
 agentstore uninstall publisher.agent-name
-/uninstall-agent publisher.agent-name
 
-# Check wallet balance and history
+# Check wallet (created automatically during first paid install)
 agentstore wallet balance
 agentstore wallet history
 ```
@@ -463,8 +428,9 @@ AgentStore is a **production-ready MVP** for a decentralized Claude Code plugin 
 **Developer Experience**
 - Single `gateway-setup` command configures everything
 - Agents appear instantly after install (no restart needed)
-- Slash commands for all operations (`/browse`, `/install-agent`, `/wallet`)
-- Transaction history and balance tracking
+- Lazy wallet creation — only created when first paid agent is installed
+- Seamless funding flow — Coinbase Onramp triggered automatically on insufficient balance
+- 4-step user flow: Install Plugin → Browse → Install Agent → Use
 
 ### Architecture Decisions
 
