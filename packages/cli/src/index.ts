@@ -3,8 +3,15 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
+import * as readline from 'readline';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const API_BASE = 'https://api-inky-seven.vercel.app';
+const MEV_COMMIT_RPC = 'https://fastrpc.mev-commit.xyz';
 
 // File paths
 const HOME_DIR = os.homedir();
@@ -13,8 +20,20 @@ const ROUTES_FILE = path.join(AGENTSTORE_DIR, 'routes.json');
 const ENTITLEMENTS_FILE = path.join(AGENTSTORE_DIR, 'entitlements.json');
 const CLAUDE_DIR = path.join(HOME_DIR, '.claude');
 const SKILLS_DIR = path.join(CLAUDE_DIR, 'skills', 'agentstore');
+const WALLET_FILE = path.join(AGENTSTORE_DIR, 'wallet.json');
 
 // Types
+interface WalletConfig {
+  address: string;
+  createdAt: string;
+  network: 'mainnet';
+  rpcEndpoint: string;
+  spendLimits: {
+    perTransaction: number;
+    daily: number;
+    weekly: number;
+  };
+}
 interface GatewayRoute {
   agentId: string;
   routeId: string;
@@ -148,6 +167,75 @@ function saveEntitlements(entitlements: Entitlement[]): void {
   fs.writeFileSync(ENTITLEMENTS_FILE, JSON.stringify(entitlements, null, 2), { mode: 0o600 });
 }
 
+// Load wallet config
+function loadWalletConfig(): WalletConfig | null {
+  try {
+    if (fs.existsSync(WALLET_FILE)) {
+      return JSON.parse(fs.readFileSync(WALLET_FILE, 'utf-8'));
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+// Get ETH price from CoinGecko
+async function getEthPrice(): Promise<number> {
+  try {
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
+    );
+    const data = (await response.json()) as { ethereum?: { usd?: number } };
+    return data.ethereum?.usd || 2000;
+  } catch {
+    return 2000;
+  }
+}
+
+// Prompt user for confirmation
+function prompt(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase());
+    });
+  });
+}
+
+// Purchase agent via API
+async function purchaseAgent(
+  agentId: string,
+  walletAddress: string,
+  txHash: string
+): Promise<{ entitlement_token: string; expires_at: string | null } | null> {
+  try {
+    const response = await fetch(`${API_BASE}/api/purchase`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent_id: agentId,
+        wallet_address: walletAddress,
+        tx_hash: txHash,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = (await response.json()) as { error?: string };
+      console.error(`Purchase failed: ${error.error || response.statusText}`);
+      return null;
+    }
+
+    return (await response.json()) as { entitlement_token: string; expires_at: string | null };
+  } catch (error) {
+    console.error(`Purchase error: ${error instanceof Error ? error.message : error}`);
+    return null;
+  }
+}
+
 // Fetch agent from API
 async function fetchAgent(agentId: string): Promise<ApiAgent | null> {
   try {
@@ -202,7 +290,7 @@ Example: "Use ${agent.agent_id}:${agent.install.gateway_routes[0]?.tools[0]?.nam
 }
 
 // Install command
-async function installAgent(agentId: string, options: { yes?: boolean }): Promise<void> {
+async function installAgent(agentId: string, options: { yes?: boolean; txHash?: string }): Promise<void> {
   ensureDirectories();
 
   console.log(`Fetching agent: ${agentId}...`);
@@ -242,12 +330,57 @@ async function installAgent(agentId: string, options: { yes?: boolean }): Promis
   }
   console.log('└─────────────────────────────────────────────────┘');
 
-  // For paid agents, we'd need wallet integration here
+  // For paid agents, handle payment flow
+  let entitlementToken: string | null = null;
+  let expiresAt: string | null = null;
+
   if (agent.type === 'proprietary' && agent.pricing.model !== 'free') {
-    console.log('\n⚠️  This is a paid agent.');
-    console.log('   Payment flow not yet implemented in CLI.');
-    console.log('   Use the full plugin flow for paid agents.');
-    process.exit(1);
+    const wallet = loadWalletConfig();
+
+    if (!wallet) {
+      console.log('\n⚠️  This is a paid agent ($' + agent.pricing.amount + ')');
+      console.log('   No wallet configured. Run the wallet package to set one up:');
+      console.log('   node packages/wallet/dist/index.js');
+      process.exit(1);
+    }
+
+    const ethPrice = await getEthPrice();
+    const priceEth = agent.pricing.amount / ethPrice;
+
+    console.log('\n💰 Payment Required:');
+    console.log(`   Price: $${agent.pricing.amount} (~${priceEth.toFixed(6)} ETH)`);
+    console.log(`   Your wallet: ${wallet.address}`);
+    console.log(`   ETH Price: $${ethPrice}`);
+
+    // Check if already purchased
+    const entitlements = loadEntitlements();
+    const existing = entitlements.find((e) => e.agentId === agent.agent_id);
+    if (existing) {
+      console.log('\n✓ Already purchased! Using existing entitlement.');
+      entitlementToken = existing.token;
+      expiresAt = existing.expiresAt;
+    } else {
+      console.log('\n⚠️  Payment requires sending ETH manually for now.');
+      console.log('   1. Send ' + priceEth.toFixed(6) + ' ETH to the publisher');
+      console.log('   2. Get the transaction hash');
+      console.log('   3. Run: agentstore install ' + agent.agent_id + ' --tx-hash 0x...');
+
+      if (!options.txHash) {
+        process.exit(1);
+      }
+
+      console.log('\nVerifying payment...');
+      const purchase = await purchaseAgent(agent.agent_id, wallet.address, options.txHash);
+
+      if (!purchase) {
+        console.log('❌ Payment verification failed.');
+        process.exit(1);
+      }
+
+      entitlementToken = purchase.entitlement_token;
+      expiresAt = purchase.expires_at;
+      console.log('✓ Payment verified!');
+    }
   }
 
   console.log('\nInstalling...');
@@ -269,6 +402,26 @@ async function installAgent(agentId: string, options: { yes?: boolean }): Promis
 
   saveRoutes(updatedRoutes);
   console.log(`  ✓ Added ${agent.install.gateway_routes.length} route(s) to ${ROUTES_FILE}`);
+
+  // Save entitlement for paid agents
+  if (entitlementToken) {
+    const entitlements = loadEntitlements();
+    const existingIdx = entitlements.findIndex((e) => e.agentId === agent.agent_id);
+    const newEntitlement: Entitlement = {
+      agentId: agent.agent_id,
+      token: entitlementToken,
+      expiresAt: expiresAt,
+    };
+
+    if (existingIdx >= 0) {
+      entitlements[existingIdx] = newEntitlement;
+    } else {
+      entitlements.push(newEntitlement);
+    }
+
+    saveEntitlements(entitlements);
+    console.log(`  ✓ Saved entitlement to ${ENTITLEMENTS_FILE}`);
+  }
 
   // Create skill file
   createSkillFile(agent);
@@ -412,14 +565,32 @@ function setupGateway(): void {
     return;
   }
 
-  // Find the gateway executable
-  // In production this would be installed globally, for now use local path
-  const gatewayPath = path.join(process.cwd(), 'packages', 'gateway', 'dist', 'index.js');
+  // Find the gateway executable - try multiple locations
+  const possiblePaths = [
+    // Installed globally via npm
+    path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@agentstore', 'gateway', 'dist', 'index.js'),
+    // Local development
+    path.join(__dirname, '..', '..', 'gateway', 'dist', 'index.js'),
+    // Relative to cwd
+    path.join(process.cwd(), 'packages', 'gateway', 'dist', 'index.js'),
+    // Hardcoded for this project
+    '/Users/zion/agentstore/packages/gateway/dist/index.js',
+  ];
+
+  let gatewayPath = possiblePaths.find((p) => fs.existsSync(p));
+
+  if (!gatewayPath) {
+    console.log('⚠️  Gateway not found. Using default path.');
+    console.log('   Make sure to build the gateway: cd packages/gateway && npm run build');
+    gatewayPath = '/Users/zion/agentstore/packages/gateway/dist/index.js';
+  }
 
   servers['agentstore-gateway'] = {
     command: 'node',
     args: [gatewayPath],
   };
+
+  console.log(`   Gateway path: ${gatewayPath}`);
 
   // Ensure .claude directory exists
   if (!fs.existsSync(CLAUDE_DIR)) {
@@ -443,6 +614,7 @@ program
   .command('install <agent_id>')
   .description('Install an agent from the marketplace')
   .option('-y, --yes', 'Skip confirmation / force reinstall')
+  .option('--tx-hash <hash>', 'Transaction hash for paid agent purchase')
   .action(installAgent);
 
 program
@@ -466,5 +638,52 @@ program
   .command('gateway-setup')
   .description('Configure gateway in Claude MCP settings')
   .action(setupGateway);
+
+program
+  .command('browse')
+  .description('Browse agents in the marketplace')
+  .option('-s, --search <query>', 'Search for agents')
+  .option('-t, --tag <tag>', 'Filter by tag')
+  .action(async (options: { search?: string; tag?: string }) => {
+    try {
+      let url = `${API_BASE}/api/agents`;
+      const params: string[] = [];
+      if (options.search) params.push(`search=${encodeURIComponent(options.search)}`);
+      if (options.tag) params.push(`tag=${encodeURIComponent(options.tag)}`);
+      if (params.length > 0) url += '?' + params.join('&');
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.error('Failed to fetch agents');
+        process.exit(1);
+      }
+
+      const data = (await response.json()) as { agents: ApiAgent[] };
+      const agents = data.agents || [];
+
+      if (agents.length === 0) {
+        console.log('No agents found.');
+        return;
+      }
+
+      console.log(`\n📦 AgentStore Marketplace (${agents.length} agents)\n`);
+
+      for (const agent of agents) {
+        const price = agent.pricing?.model === 'free' ? 'FREE' : `$${agent.pricing?.amount || 0}`;
+        const featured = (agent as unknown as { is_featured?: boolean }).is_featured ? '⭐ ' : '';
+
+        console.log(`  ${featured}${agent.name}`);
+        console.log(`    ID: ${agent.agent_id}`);
+        console.log(`    ${agent.type === 'open' ? '🆓' : '💰'} ${price} | by ${agent.publisher?.display_name || 'Unknown'}`);
+        console.log(`    ${(agent.description || '').slice(0, 70)}${(agent.description || '').length > 70 ? '...' : ''}`);
+        console.log();
+      }
+
+      console.log('Install with: agentstore install <agent_id>');
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+  });
 
 program.parse();
