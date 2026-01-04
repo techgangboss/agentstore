@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase';
-import { verifyPayment, usdToEth } from '@/lib/payment-verification';
+import { verifyPreconfirmation, usdToEth, PRECONF_VERIFICATION_DEADLINE_MS } from '@/lib/payment-verification';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
   const priceUsd = pricing.amount_usd || pricing.amount || 0;
   const expectedAmountWei = await usdToEth(priceUsd);
 
-  // Verify the payment on-chain via mev-commit RPC
-  const verification = await verifyPayment({
+  // Verify the payment via mev-commit RPC (supports preconfirmations for instant access)
+  const verification = await verifyPreconfirmation({
     txHash: tx_hash as `0x${string}`,
     expectedFrom: wallet_address,
     expectedTo: publisherAddress,
@@ -118,7 +118,14 @@ export async function POST(request: NextRequest) {
   // Generate entitlement token
   const entitlementToken = `ent_${crypto.randomBytes(32).toString('hex')}`;
 
-  // Create entitlement (using admin client to bypass RLS)
+  // Determine confirmation status and set verification deadline for preconfirmed
+  const isPreconfirmed = verification.status === 'preconfirmed';
+  const verificationDeadline = isPreconfirmed
+    ? new Date(Date.now() + PRECONF_VERIFICATION_DEADLINE_MS).toISOString()
+    : null;
+
+  // Create entitlement with confirmation status (using admin client to bypass RLS)
+  // Preconfirmed entitlements get instant access but will be verified/revoked within 60s
   const { data: entitlement, error: entitlementError } = await adminSupabase
     .from('entitlements')
     .insert({
@@ -129,6 +136,8 @@ export async function POST(request: NextRequest) {
       amount_paid: amountPaid,
       currency: 'ETH',
       expires_at: pricing.model === 'one_time' ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      confirmation_status: verification.status,
+      verification_deadline: verificationDeadline,
     })
     .select()
     .single();
@@ -143,6 +152,13 @@ export async function POST(request: NextRequest) {
 
   // Record transaction (using admin client to bypass RLS)
   // This also serves as replay protection via UNIQUE constraint on tx_hash
+  const blockNumber = verification.txDetails?.blockNumber
+    ? Number(verification.txDetails.blockNumber)
+    : null;
+  const confirmations = verification.txDetails?.confirmations
+    ? Number(verification.txDetails.confirmations)
+    : 0;
+
   const { error: txError } = await adminSupabase.from('transactions').insert({
     entitlement_id: entitlement.id,
     tx_hash: tx_hash.toLowerCase(),
@@ -152,7 +168,9 @@ export async function POST(request: NextRequest) {
     currency: 'ETH',
     platform_fee: platformFee,
     publisher_amount: publisherAmount,
-    status: 'confirmed',
+    status: isPreconfirmed ? 'pending' : 'confirmed',
+    block_number: blockNumber,
+    confirmations: confirmations,
   });
 
   if (txError) {
@@ -176,10 +194,12 @@ export async function POST(request: NextRequest) {
     success: true,
     entitlement_token: entitlementToken,
     expires_at: entitlement.expires_at,
+    confirmation_status: verification.status,
     payment: {
       amount_eth: amountPaid,
       tx_hash: tx_hash,
-      confirmations: verification.txDetails!.confirmations.toString(),
+      status: isPreconfirmed ? 'preconfirmed' : 'confirmed',
+      confirmations: confirmations.toString(),
     },
     install: agent.manifest?.install,
   });

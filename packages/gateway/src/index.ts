@@ -6,27 +6,59 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { z } from 'zod';
 
-const AGENTSTORE_DIR = path.join(process.env.HOME || '~', '.agentstore');
-const ROUTES_FILE = path.join(AGENTSTORE_DIR, 'routes.json');
-const ENTITLEMENTS_FILE = path.join(AGENTSTORE_DIR, 'entitlements.json');
+// Validated base directory - prevent path traversal
+const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '/tmp';
+const AGENTSTORE_DIR = path.resolve(path.join(HOME_DIR, '.agentstore'));
 
-interface GatewayRoute {
-  agentId: string;
-  routeId: string;
-  mcpEndpoint: string;
-  tools: string[];
-  authType: 'none' | 'entitlement' | 'api_key';
+// Ensure paths stay within AGENTSTORE_DIR
+function safePath(filePath: string): string {
+  const resolved = path.resolve(AGENTSTORE_DIR, filePath);
+  if (!resolved.startsWith(AGENTSTORE_DIR)) {
+    throw new Error(`Path traversal attempt detected: ${filePath}`);
+  }
+  return resolved;
 }
 
-interface Entitlement {
-  agentId: string;
-  token: string;
-  expiresAt: string | null;
-}
+const ROUTES_FILE = safePath('routes.json');
+const ENTITLEMENTS_FILE = safePath('entitlements.json');
+
+// Zod schemas for config validation
+const ToolDefinitionSchema = z.object({
+  name: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/),
+  description: z.string().max(1000),
+  inputSchema: z.object({
+    type: z.literal('object'),
+    properties: z.record(z.unknown()).optional(),
+    required: z.array(z.string()).optional(),
+  }),
+});
+
+const GatewayRouteSchema = z.object({
+  agentId: z.string().min(1).max(100).regex(/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/),
+  routeId: z.string().min(1).max(100),
+  mcpEndpoint: z.string().url(),
+  tools: z.array(ToolDefinitionSchema),
+  authType: z.enum(['none', 'entitlement', 'api_key']),
+});
+
+const EntitlementSchema = z.object({
+  agentId: z.string().min(1).max(100),
+  token: z.string().min(1),
+  expiresAt: z.string().nullable(),
+});
+
+const RoutesConfigSchema = z.array(GatewayRouteSchema);
+const EntitlementsConfigSchema = z.array(EntitlementSchema);
+
+type ToolDefinition = z.infer<typeof ToolDefinitionSchema>;
+type GatewayRoute = z.infer<typeof GatewayRouteSchema>;
+type Entitlement = z.infer<typeof EntitlementSchema>;
 
 class AgentStoreGateway {
   private routes: Map<string, GatewayRoute> = new Map();
+  private toolDefinitions: Map<string, { route: GatewayRoute; tool: ToolDefinition }> = new Map();
   private entitlements: Map<string, Entitlement> = new Map();
 
   constructor() {
@@ -34,28 +66,87 @@ class AgentStoreGateway {
   }
 
   private loadConfig(): void {
-    // Load routes
+    // Load routes and tool definitions with validation
     if (fs.existsSync(ROUTES_FILE)) {
-      const routes: GatewayRoute[] = JSON.parse(fs.readFileSync(ROUTES_FILE, 'utf-8'));
-      for (const route of routes) {
-        for (const tool of route.tools) {
-          this.routes.set(`${route.agentId}:${tool}`, route);
+      try {
+        const rawData = fs.readFileSync(ROUTES_FILE, 'utf-8');
+        const parsed = JSON.parse(rawData);
+        const validationResult = RoutesConfigSchema.safeParse(parsed);
+
+        if (!validationResult.success) {
+          console.error('Routes config validation failed:', validationResult.error.format());
+          throw new Error(`Invalid routes configuration: ${validationResult.error.message}`);
         }
+
+        const routes = validationResult.data;
+        for (const route of routes) {
+          // Additional URL validation - only allow HTTPS in production
+          if (process.env.NODE_ENV === 'production' && !route.mcpEndpoint.startsWith('https://')) {
+            console.warn(`Skipping route ${route.agentId}: HTTPS required in production`);
+            continue;
+          }
+
+          this.routes.set(route.agentId, route);
+          // Register each tool with its full definition
+          for (const tool of route.tools) {
+            const prefixedName = `${route.agentId}:${tool.name}`;
+            this.toolDefinitions.set(prefixedName, { route, tool });
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Failed to load routes config: ${message}`, { cause: error });
       }
     }
 
-    // Load entitlements
+    // Load entitlements with validation
     if (fs.existsSync(ENTITLEMENTS_FILE)) {
-      const entitlements: Entitlement[] = JSON.parse(fs.readFileSync(ENTITLEMENTS_FILE, 'utf-8'));
-      for (const ent of entitlements) {
-        this.entitlements.set(ent.agentId, ent);
+      try {
+        const rawData = fs.readFileSync(ENTITLEMENTS_FILE, 'utf-8');
+        const parsed = JSON.parse(rawData);
+        const validationResult = EntitlementsConfigSchema.safeParse(parsed);
+
+        if (!validationResult.success) {
+          console.error('Entitlements config validation failed:', validationResult.error.format());
+          throw new Error(`Invalid entitlements configuration: ${validationResult.error.message}`);
+        }
+
+        for (const ent of validationResult.data) {
+          this.entitlements.set(ent.agentId, ent);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Failed to load entitlements config: ${message}`, { cause: error });
       }
     }
   }
 
+  // Reload config (useful when new agents are installed)
+  reloadConfig(): void {
+    this.routes.clear();
+    this.toolDefinitions.clear();
+    this.entitlements.clear();
+    this.loadConfig();
+  }
+
   getRouteForTool(toolName: string): GatewayRoute | undefined {
-    // Tool names are prefixed with agent ID: "agentId:toolName"
-    return this.routes.get(toolName);
+    const entry = this.toolDefinitions.get(toolName);
+    return entry?.route;
+  }
+
+  // Get all registered tools for ListTools
+  getAllTools(): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
+    const tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
+
+    for (const [prefixedName, { tool }] of this.toolDefinitions) {
+      tools.push({
+        name: prefixedName,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      });
+    }
+
+    return tools;
   }
 
   getEntitlement(agentId: string): Entitlement | undefined {
@@ -79,32 +170,68 @@ class AgentStoreGateway {
     if (route.authType === 'entitlement') {
       const ent = this.getEntitlement(route.agentId);
       if (!ent) {
-        throw new Error(`No valid entitlement for agent ${route.agentId}`);
+        throw new Error(`No valid entitlement for agent ${route.agentId}. Please purchase or renew access.`);
       }
       headers['Authorization'] = `Bearer ${ent.token}`;
     }
 
-    // Make request to publisher's MCP endpoint
-    const response = await fetch(route.mcpEndpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'tools/call',
-        params: {
-          name: toolName.split(':')[1], // Remove agent prefix
-          arguments: args,
-        },
-        id: Date.now(),
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`MCP call failed: ${response.status} ${response.statusText}`);
+    // Validate endpoint URL before making request
+    const endpointUrl = new URL(route.mcpEndpoint);
+    if (process.env.NODE_ENV === 'production' && endpointUrl.protocol !== 'https:') {
+      throw new Error(`Insecure endpoint rejected: ${route.mcpEndpoint}. HTTPS required.`);
     }
 
-    const result = (await response.json()) as { result?: unknown };
-    return result.result;
+    try {
+      // Make request to publisher's MCP endpoint with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      const response = await fetch(route.mcpEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: toolName.split(':')[1], // Remove agent prefix
+            arguments: args,
+          },
+          id: Date.now(),
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => 'No response body');
+        throw new Error(
+          `MCP call failed: ${response.status} ${response.statusText}. ` +
+          `Endpoint: ${route.mcpEndpoint}. Details: ${errorBody.slice(0, 200)}`
+        );
+      }
+
+      const result = (await response.json()) as { result?: unknown; error?: { message?: string } };
+
+      if (result.error) {
+        throw new Error(`MCP endpoint error: ${result.error.message || 'Unknown error'}`);
+      }
+
+      return result.result;
+    } catch (error) {
+      // Preserve error context
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          const timeoutErr = new Error(`Request to ${route.mcpEndpoint} timed out after 30s`);
+          timeoutErr.cause = error;
+          throw timeoutErr;
+        }
+        const wrappedErr = new Error(`Failed to call ${toolName} on ${route.agentId}: ${error.message}`);
+        wrappedErr.cause = error;
+        throw wrappedErr;
+      }
+      throw new Error(`Unexpected error calling ${toolName}: ${String(error)}`);
+    }
   }
 }
 
@@ -125,15 +252,9 @@ async function main() {
 
   // List all available tools from installed agents
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools: Array<{
-      name: string;
-      description: string;
-      inputSchema: Record<string, unknown>;
-    }> = [];
-
-    // TODO: Load tool definitions from installed agents
-    // For now, return empty list
-
+    // Reload config to pick up newly installed agents
+    gateway.reloadConfig();
+    const tools = gateway.getAllTools();
     return { tools };
   });
 

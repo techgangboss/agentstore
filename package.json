@@ -14,10 +14,13 @@
     "dev": "npm run --workspaces dev",
     "build": "npm run --workspaces build",
     "lint": "npm run --workspaces lint",
-    "test": "npm run --workspaces test"
+    "test": "npm run --workspaces --if-present test",
+    "test:coverage": "npm run --workspaces --if-present test:coverage",
+    "typecheck": "npm run --workspaces --if-present typecheck"
   },
   "devDependencies": {
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
   },
   "engines": {
     "node": ">=18"

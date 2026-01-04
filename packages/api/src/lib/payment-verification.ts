@@ -4,8 +4,11 @@ import { mainnet } from 'viem/chains';
 // mev-commit RPC endpoint for Ethereum mainnet
 const MEV_COMMIT_RPC = 'https://fastrpc.mev-commit.xyz';
 
-// Minimum confirmations required for payment verification
+// Minimum confirmations required for final verification
 const MIN_CONFIRMATIONS = 2;
+
+// Time window for preconfirmation to be confirmed (60 seconds)
+export const PRECONF_VERIFICATION_DEADLINE_MS = 60 * 1000;
 
 // Create a public client for Ethereum mainnet via mev-commit
 const publicClient = createPublicClient({
@@ -13,16 +16,19 @@ const publicClient = createPublicClient({
   transport: http(MEV_COMMIT_RPC),
 });
 
+export type ConfirmationStatus = 'preconfirmed' | 'confirmed' | 'revoked';
+
 export interface PaymentVerificationResult {
   valid: boolean;
+  status: ConfirmationStatus;
   error?: string;
   txDetails?: {
     from: string;
     to: string;
     value: string;
     valueEth: string;
-    blockNumber: bigint;
-    confirmations: bigint;
+    blockNumber?: bigint;
+    confirmations?: bigint;
   };
 }
 
@@ -36,7 +42,140 @@ export interface VerifyPaymentParams {
 }
 
 /**
- * Verify an Ethereum payment transaction on mainnet via mev-commit RPC
+ * Verify payment via mev-commit FastRPC preconfirmation
+ *
+ * mev-commit's eth_getTransactionReceipt returns a receipt once preconfirmation
+ * commitments are obtained from providers - BEFORE the tx is on-chain.
+ * This is the standard wallet flow for preconfirmations.
+ *
+ * @see https://docs.primev.xyz/v1.1.0/get-started/fastrpc
+ */
+export async function verifyPreconfirmation(
+  params: VerifyPaymentParams
+): Promise<PaymentVerificationResult> {
+  const { txHash, expectedFrom, expectedTo, expectedAmountWei, slippageBps = 100 } = params;
+
+  try {
+    // On mev-commit RPC, getTransactionReceipt returns a receipt once preconfirmed
+    // This happens BEFORE the tx is actually mined on-chain
+    const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+
+    if (!receipt) {
+      return {
+        valid: false,
+        status: 'revoked',
+        error: 'Transaction not found or not yet preconfirmed'
+      };
+    }
+
+    if (receipt.status !== 'success') {
+      return { valid: false, status: 'revoked', error: 'Transaction failed' };
+    }
+
+    // Get transaction details to verify payment params
+    const tx = await publicClient.getTransaction({ hash: txHash });
+
+    if (!tx) {
+      return { valid: false, status: 'revoked', error: 'Transaction details not found' };
+    }
+
+    // Verify sender address (case-insensitive)
+    if (tx.from.toLowerCase() !== expectedFrom.toLowerCase()) {
+      return {
+        valid: false,
+        status: 'revoked',
+        error: `Sender mismatch: expected ${expectedFrom}, got ${tx.from}`,
+      };
+    }
+
+    // Verify recipient address (case-insensitive)
+    if (!tx.to || tx.to.toLowerCase() !== expectedTo.toLowerCase()) {
+      return {
+        valid: false,
+        status: 'revoked',
+        error: `Recipient mismatch: expected ${expectedTo}, got ${tx.to}`,
+      };
+    }
+
+    // Verify amount with slippage tolerance
+    const minAmount = expectedAmountWei - (expectedAmountWei * BigInt(slippageBps)) / BigInt(10000);
+
+    if (tx.value < minAmount) {
+      return {
+        valid: false,
+        status: 'revoked',
+        error: `Insufficient payment: expected ${formatEther(expectedAmountWei)} ETH, got ${formatEther(tx.value)} ETH`,
+      };
+    }
+
+    // Check confirmation depth
+    const currentBlock = await publicClient.getBlockNumber();
+    const confirmations = currentBlock - receipt.blockNumber;
+
+    // Receipt exists = preconfirmed (or confirmed if enough blocks)
+    const status: ConfirmationStatus = confirmations >= MIN_CONFIRMATIONS ? 'confirmed' : 'preconfirmed';
+
+    return {
+      valid: true,
+      status,
+      txDetails: {
+        from: tx.from,
+        to: tx.to,
+        value: tx.value.toString(),
+        valueEth: formatEther(tx.value),
+        blockNumber: receipt.blockNumber,
+        confirmations,
+      },
+    };
+  } catch (error) {
+    console.error('Preconfirmation verification error:', error);
+    return {
+      valid: false,
+      status: 'revoked',
+      error: error instanceof Error ? error.message : 'Unknown verification error',
+    };
+  }
+}
+
+/**
+ * Verify final confirmation status (for background verification)
+ * Used to confirm preconfirmed transactions or revoke if failed
+ */
+export async function verifyFinalConfirmation(
+  txHash: `0x${string}`
+): Promise<{ status: ConfirmationStatus; blockNumber?: bigint; confirmations?: bigint }> {
+  try {
+    const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+
+    if (!receipt) {
+      // Still pending - not yet confirmed
+      return { status: 'preconfirmed' };
+    }
+
+    if (receipt.status !== 'success') {
+      // Transaction failed on-chain
+      return { status: 'revoked' };
+    }
+
+    const currentBlock = await publicClient.getBlockNumber();
+    const confirmations = currentBlock - receipt.blockNumber;
+
+    if (confirmations >= MIN_CONFIRMATIONS) {
+      return { status: 'confirmed', blockNumber: receipt.blockNumber, confirmations };
+    }
+
+    // Included but not enough confirmations yet
+    return { status: 'preconfirmed', blockNumber: receipt.blockNumber, confirmations };
+  } catch (error) {
+    console.error('Final confirmation check error:', error);
+    // On error, don't revoke - let caller decide
+    return { status: 'preconfirmed' };
+  }
+}
+
+/**
+ * Legacy: Verify an Ethereum payment with full confirmations (blocking)
+ * @deprecated Use verifyPreconfirmation for instant access
  */
 export async function verifyPayment(
   params: VerifyPaymentParams
@@ -48,18 +187,18 @@ export async function verifyPayment(
     const tx = await publicClient.getTransaction({ hash: txHash });
 
     if (!tx) {
-      return { valid: false, error: 'Transaction not found' };
+      return { valid: false, status: 'revoked', error: 'Transaction not found' };
     }
 
     // Fetch transaction receipt to confirm it succeeded
     const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
 
     if (!receipt) {
-      return { valid: false, error: 'Transaction receipt not found - may be pending' };
+      return { valid: false, status: 'preconfirmed', error: 'Transaction receipt not found - may be pending' };
     }
 
     if (receipt.status !== 'success') {
-      return { valid: false, error: 'Transaction failed on-chain' };
+      return { valid: false, status: 'revoked', error: 'Transaction failed on-chain' };
     }
 
     // Get current block for confirmation count
@@ -69,6 +208,7 @@ export async function verifyPayment(
     if (confirmations < MIN_CONFIRMATIONS) {
       return {
         valid: false,
+        status: 'preconfirmed',
         error: `Insufficient confirmations: ${confirmations}/${MIN_CONFIRMATIONS}`,
       };
     }
@@ -77,6 +217,7 @@ export async function verifyPayment(
     if (tx.from.toLowerCase() !== expectedFrom.toLowerCase()) {
       return {
         valid: false,
+        status: 'revoked',
         error: `Sender mismatch: expected ${expectedFrom}, got ${tx.from}`,
       };
     }
@@ -85,6 +226,7 @@ export async function verifyPayment(
     if (!tx.to || tx.to.toLowerCase() !== expectedTo.toLowerCase()) {
       return {
         valid: false,
+        status: 'revoked',
         error: `Recipient mismatch: expected ${expectedTo}, got ${tx.to}`,
       };
     }
@@ -96,6 +238,7 @@ export async function verifyPayment(
     if (tx.value < minAmount) {
       return {
         valid: false,
+        status: 'revoked',
         error: `Insufficient payment: expected ${formatEther(expectedAmountWei)} ETH, got ${formatEther(tx.value)} ETH`,
       };
     }
@@ -107,6 +250,7 @@ export async function verifyPayment(
 
     return {
       valid: true,
+      status: 'confirmed',
       txDetails: {
         from: tx.from,
         to: tx.to,
@@ -120,6 +264,7 @@ export async function verifyPayment(
     console.error('Payment verification error:', error);
     return {
       valid: false,
+      status: 'revoked',
       error: error instanceof Error ? error.message : 'Unknown verification error',
     };
   }
