@@ -1,15 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase';
 
+// Sanitize search input to prevent LIKE pattern injection
+function sanitizeSearch(input: string | null): string | null {
+  if (!input) return null;
+  // Remove LIKE special characters and limit length
+  return input
+    .replace(/[%_\\]/g, '') // Remove LIKE wildcards
+    .replace(/[<>'"`;(){}[\]]/g, '') // Remove potentially dangerous chars
+    .trim()
+    .slice(0, 100); // Limit to 100 chars
+}
+
+// Validate slug format (alphanumeric + hyphens)
+function isValidSlug(input: string | null): boolean {
+  if (!input) return true;
+  return /^[a-z0-9-]+$/.test(input) && input.length <= 50;
+}
+
 // GET /api/agents - List agents with search and filters
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const search = searchParams.get('search');
-    const tag = searchParams.get('tag');
+    const rawSearch = searchParams.get('search');
+    const rawTag = searchParams.get('tag');
     const type = searchParams.get('type');
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const rawLimit = searchParams.get('limit');
+    const rawOffset = searchParams.get('offset');
+
+    // Validate and sanitize inputs
+    const search = sanitizeSearch(rawSearch);
+    const tag = isValidSlug(rawTag) ? rawTag : null;
+    const limit = Math.min(Math.max(parseInt(rawLimit || '20') || 20, 1), 100);
+    const offset = Math.max(parseInt(rawOffset || '0') || 0, 0);
 
     const supabase = createClient();
 

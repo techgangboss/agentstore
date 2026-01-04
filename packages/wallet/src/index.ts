@@ -200,9 +200,32 @@ export class AgentStoreWallet {
   }
 
   private async getOrCreatePassword(): Promise<string> {
-    // TODO: In production, use OS keychain (macOS Keychain, Windows Credential Manager)
-    // For now, derive from machine-specific info
-    const machineId = os.hostname() + (process.env.USER || process.env.USERNAME || 'default');
+    // Check for explicit password in environment (for CI/automation)
+    if (process.env.AGENTSTORE_WALLET_PASSWORD) {
+      return crypto.createHash('sha256').update(process.env.AGENTSTORE_WALLET_PASSWORD).digest('hex');
+    }
+
+    // Check for password file (more secure than env var)
+    const passwordFile = path.join(WALLET_DIR, '.password');
+    if (fs.existsSync(passwordFile)) {
+      const password = fs.readFileSync(passwordFile, 'utf-8').trim();
+      return crypto.createHash('sha256').update(password).digest('hex');
+    }
+
+    // Derive from multiple machine-specific sources for entropy
+    // Note: This is a fallback. For production, use OS keychain via keytar package
+    const sources = [
+      os.hostname(),
+      os.userInfo().username,
+      os.homedir(),
+      os.platform(),
+      os.arch(),
+      // Add some file-based entropy if available
+      fs.existsSync('/etc/machine-id') ? fs.readFileSync('/etc/machine-id', 'utf-8').trim() : '',
+      process.env.USER || process.env.USERNAME || '',
+    ].filter(Boolean);
+
+    const machineId = sources.join(':');
     return crypto.createHash('sha256').update(machineId).digest('hex');
   }
 
