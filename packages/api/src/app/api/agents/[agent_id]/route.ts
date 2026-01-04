@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 // GET /api/agents/[agent_id] - Get agent details
 export async function GET(
@@ -8,7 +8,8 @@ export async function GET(
 ) {
   const { agent_id } = params;
 
-  const supabase = createClient();
+  // Use admin client to bypass any caching issues
+  const supabase = createAdminClient();
 
   const { data: agent, error } = await supabase
     .from('agents')
@@ -59,5 +60,12 @@ export async function GET(
     tags: agent.manifest.tags ?? [],
     download_count: agent.download_count ?? 0,
     updated_at: agent.updated_at,
+  }, {
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+    },
   });
 }
+
+// Disable static generation
+export const dynamic = 'force-dynamic';

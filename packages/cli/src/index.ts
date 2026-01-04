@@ -106,8 +106,9 @@ interface AgentManifest {
   };
   pricing: {
     model: string;
-    amount: number;
-    currency: string;
+    amount?: number;
+    amount_usd?: number;
+    currency?: string;
   };
   install: {
     gateway_routes: Array<{
@@ -144,8 +145,9 @@ interface ApiAgent {
   };
   pricing: {
     model: string;
-    amount: number;
-    currency: string;
+    amount?: number;
+    amount_usd?: number;
+    currency?: string;
   };
   install: {
     gateway_routes: Array<{
@@ -176,6 +178,11 @@ function ensureDirectories(): void {
   if (!fs.existsSync(SKILLS_DIR)) {
     fs.mkdirSync(SKILLS_DIR, { recursive: true });
   }
+}
+
+// Get price from pricing object (handles both amount and amount_usd)
+function getPriceUsd(pricing: { model: string; amount?: number; amount_usd?: number }): number {
+  return pricing.amount ?? pricing.amount_usd ?? 0;
 }
 
 // Load/save routes
@@ -782,7 +789,7 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
   console.log('├─────────────────────────────────────────────────┤');
   console.log(`│ Publisher: ${agent.publisher.display_name}`.padEnd(50) + '│');
   console.log(`│ Type: ${agent.type === 'open' ? 'Free (Open Source)' : 'Paid (Proprietary)'}`.padEnd(50) + '│');
-  console.log(`│ Price: ${agent.pricing.model === 'free' ? 'FREE' : `$${agent.pricing.amount}`}`.padEnd(50) + '│');
+  console.log(`│ Price: ${agent.pricing.model === 'free' ? 'FREE' : `$${getPriceUsd(agent.pricing)}`}`.padEnd(50) + '│');
   console.log('├─────────────────────────────────────────────────┤');
   console.log('│ Tools:'.padEnd(50) + '│');
   for (const route of agent.install.gateway_routes) {
@@ -807,10 +814,10 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
 
     const wallet = loadWalletConfig()!;
     const ethPrice = await getEthPrice();
-    const priceEth = agent.pricing.amount / ethPrice;
+    const priceEth = getPriceUsd(agent.pricing) / ethPrice;
 
     console.log('\n💰 Payment Required:');
-    console.log(`   Price: $${agent.pricing.amount} (~${priceEth.toFixed(6)} ETH)`);
+    console.log(`   Price: $${getPriceUsd(agent.pricing)} (~${priceEth.toFixed(6)} ETH)`);
     console.log(`   Your wallet: ${wallet.address}`);
     console.log(`   ETH Price: $${ethPrice}`);
 
@@ -839,10 +846,10 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
           console.log(`\n   Your balance: ${balance.eth} ETH ($${balance.usd})`);
 
           // Auto-trigger funding flow if insufficient balance
-          if (balance.usd < agent.pricing.amount) {
-            console.log(`\n⚠️  Insufficient balance. Need $${agent.pricing.amount}, have $${balance.usd}`);
+          if (balance.usd < getPriceUsd(agent.pricing)) {
+            console.log(`\n⚠️  Insufficient balance. Need $${getPriceUsd(agent.pricing)}, have $${balance.usd}`);
 
-            const funded = await triggerFundingFlow(agent.pricing.amount);
+            const funded = await triggerFundingFlow(getPriceUsd(agent.pricing));
             if (!funded) {
               process.exit(1);
             }
@@ -851,8 +858,8 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
             const newBalance = await getWalletBalance();
             console.log(`   New balance: ${newBalance.eth} ETH ($${newBalance.usd})`);
 
-            if (newBalance.usd < agent.pricing.amount) {
-              console.log(`\n❌ Still insufficient. Need $${agent.pricing.amount}, have $${newBalance.usd}`);
+            if (newBalance.usd < getPriceUsd(agent.pricing)) {
+              console.log(`\n❌ Still insufficient. Need $${getPriceUsd(agent.pricing)}, have $${newBalance.usd}`);
               process.exit(1);
             }
           }
@@ -863,7 +870,7 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
 
         // Confirm payment
         if (!options.yes) {
-          const confirm = await prompt(`\nPay $${agent.pricing.amount} (~${priceEth.toFixed(6)} ETH) to ${payoutAddress.slice(0, 10)}...? (y/n) `);
+          const confirm = await prompt(`\nPay $${getPriceUsd(agent.pricing)} (~${priceEth.toFixed(6)} ETH) to ${payoutAddress.slice(0, 10)}...? (y/n) `);
           if (confirm !== 'y' && confirm !== 'yes') {
             console.log('Payment cancelled.');
             process.exit(0);
@@ -875,7 +882,7 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
           console.log('\n🔄 Processing payment...');
           const payment = await sendAgentPayment({
             to: payoutAddress,
-            amountUsd: agent.pricing.amount,
+            amountUsd: getPriceUsd(agent.pricing),
             agentId: agent.agent_id,
           });
           txHash = payment.txHash;
@@ -1196,8 +1203,9 @@ program
       console.log(`\n📦 AgentStore Marketplace (${agents.length} agents)\n`);
 
       for (const agent of agents) {
-        const isFree = agent.pricing?.model === 'free' || agent.pricing?.amount === 0;
-        const price = isFree ? 'FREE' : `$${agent.pricing?.amount || 0}`;
+        const priceAmount = agent.pricing ? getPriceUsd(agent.pricing) : 0;
+        const isFree = agent.pricing?.model === 'free' || priceAmount === 0;
+        const price = isFree ? 'FREE' : `$${priceAmount}`;
         const priceEmoji = isFree ? '🆓' : '💰';
         const featured = (agent as unknown as { is_featured?: boolean }).is_featured ? '⭐ ' : '';
 
