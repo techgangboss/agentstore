@@ -190,13 +190,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update agent' }, { status: 500 });
     }
 
-    // Store version history
-    await adminSupabase.from('agent_versions').insert({
-      agent_id: existingAgent.id,
-      version: data.version,
-      manifest,
-      changelog: `Updated to version ${data.version}`,
-    });
+    // Store version history atomically to prevent race conditions
+    const { data: versionResult, error: versionError } = await adminSupabase.rpc(
+      'create_agent_version',
+      {
+        p_agent_uuid: existingAgent.id,
+        p_version: data.version,
+        p_manifest: manifest,
+        p_changelog: `Updated to version ${data.version}`,
+      }
+    );
+
+    if (versionError) {
+      console.error('Version creation error:', versionError);
+      // Non-fatal: version history is nice to have but not critical
+    } else if (versionResult && !versionResult[0]?.success) {
+      console.warn('Version already exists:', versionResult[0]?.error_message);
+    }
 
     return NextResponse.json({
       success: true,

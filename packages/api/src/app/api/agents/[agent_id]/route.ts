@@ -51,6 +51,7 @@ export async function GET(
       publisher_id: agent.publisher.publisher_id,
       display_name: agent.publisher.display_name,
       support_url: agent.publisher.support_url ?? null,
+      payout_address: agent.publisher.payout_address ?? null,
     },
     pricing: agent.manifest.pricing ?? { model: 'free', amount: 0 },
     install: agent.manifest.install ?? null,
