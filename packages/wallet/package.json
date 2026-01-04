@@ -12,6 +12,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "keytar": "^7.9.0",
     "viem": "^2.0.0"
   },
   "devDependencies": {

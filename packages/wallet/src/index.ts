@@ -6,13 +6,15 @@ import {
   formatEther,
   parseEther,
   type Hash,
-  type TransactionReceipt,
 } from 'viem';
 import { mainnet } from 'viem/chains';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import * as os from 'os';
+import * as keytar from 'keytar';
+
+const KEYCHAIN_SERVICE = 'agentstore-wallet';
+const KEYCHAIN_ACCOUNT = 'encryption-key';
 
 // mev-commit RPC endpoint for Ethereum mainnet
 const MEV_COMMIT_RPC = 'https://fastrpc.mev-commit.xyz';
@@ -200,33 +202,38 @@ export class AgentStoreWallet {
   }
 
   private async getOrCreatePassword(): Promise<string> {
-    // Check for explicit password in environment (for CI/automation)
+    // Priority 1: Check for explicit password in environment (for CI/automation)
     if (process.env.AGENTSTORE_WALLET_PASSWORD) {
       return crypto.createHash('sha256').update(process.env.AGENTSTORE_WALLET_PASSWORD).digest('hex');
     }
 
-    // Check for password file (more secure than env var)
+    // Priority 2: Try OS keychain (most secure for interactive use)
+    try {
+      const keychainPassword = await keytar.getPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+      if (keychainPassword) {
+        return keychainPassword;
+      }
+
+      // Generate and store a new secure password in keychain
+      const newPassword = crypto.randomBytes(32).toString('hex');
+      await keytar.setPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, newPassword);
+      return newPassword;
+    } catch (keytarError) {
+      // Keytar may fail on headless systems or in containers
+      console.warn('OS keychain unavailable, falling back to file-based password');
+    }
+
+    // Priority 3: Check for password file (for servers/containers)
     const passwordFile = path.join(WALLET_DIR, '.password');
     if (fs.existsSync(passwordFile)) {
       const password = fs.readFileSync(passwordFile, 'utf-8').trim();
       return crypto.createHash('sha256').update(password).digest('hex');
     }
 
-    // Derive from multiple machine-specific sources for entropy
-    // Note: This is a fallback. For production, use OS keychain via keytar package
-    const sources = [
-      os.hostname(),
-      os.userInfo().username,
-      os.homedir(),
-      os.platform(),
-      os.arch(),
-      // Add some file-based entropy if available
-      fs.existsSync('/etc/machine-id') ? fs.readFileSync('/etc/machine-id', 'utf-8').trim() : '',
-      process.env.USER || process.env.USERNAME || '',
-    ].filter(Boolean);
-
-    const machineId = sources.join(':');
-    return crypto.createHash('sha256').update(machineId).digest('hex');
+    // Priority 4: Generate and save a password file (first run on headless system)
+    const generatedPassword = crypto.randomBytes(32).toString('hex');
+    fs.writeFileSync(passwordFile, generatedPassword, { mode: 0o600 });
+    return crypto.createHash('sha256').update(generatedPassword).digest('hex');
   }
 
   getAddress(): string {

@@ -28,6 +28,18 @@ export async function GET(
     );
   }
 
+  // Validate required nested data exists
+  if (!agent.publisher || !agent.manifest) {
+    console.error('Agent missing required data:', {
+      hasPublisher: !!agent.publisher,
+      hasManifest: !!agent.manifest
+    });
+    return NextResponse.json(
+      { error: 'Agent data incomplete' },
+      { status: 500 }
+    );
+  }
+
   // Return full manifest for installation
   return NextResponse.json({
     agent_id: agent.agent_id,
@@ -38,13 +50,13 @@ export async function GET(
     publisher: {
       publisher_id: agent.publisher.publisher_id,
       display_name: agent.publisher.display_name,
-      support_url: agent.publisher.support_url,
+      support_url: agent.publisher.support_url ?? null,
     },
-    pricing: agent.manifest.pricing,
-    install: agent.manifest.install,
-    permissions: agent.manifest.permissions,
-    tags: agent.manifest.tags,
-    download_count: agent.download_count,
+    pricing: agent.manifest.pricing ?? { model: 'free', amount: 0 },
+    install: agent.manifest.install ?? null,
+    permissions: agent.manifest.permissions ?? { requires_network: false, requires_filesystem: false },
+    tags: agent.manifest.tags ?? [],
+    download_count: agent.download_count ?? 0,
     updated_at: agent.updated_at,
   });
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase';
-import { verifyPayment, isTransactionUsed, usdToEth } from '@/lib/payment-verification';
+import { verifyPayment, usdToEth } from '@/lib/payment-verification';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -62,16 +62,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Check if transaction already used (replay protection)
-  const txUsed = await isTransactionUsed(adminSupabase, tx_hash);
-  if (txUsed) {
-    return NextResponse.json(
-      { error: 'Transaction already used for a purchase' },
-      { status: 409 }
-    );
-  }
-
-  // Check if already purchased by this wallet
+  // Check if already purchased by this wallet (early exit)
   const { data: existing } = await adminSupabase
     .from('entitlements')
     .select('id')
@@ -86,6 +77,9 @@ export async function POST(request: NextRequest) {
       { status: 409 }
     );
   }
+
+  // Note: Transaction uniqueness is enforced by DB constraint (tx_hash UNIQUE)
+  // We handle the race condition at insert time below
 
   // Get publisher payout address
   const publisherAddress = agent.publisher?.payout_address;
@@ -148,6 +142,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Record transaction (using admin client to bypass RLS)
+  // This also serves as replay protection via UNIQUE constraint on tx_hash
   const { error: txError } = await adminSupabase.from('transactions').insert({
     entitlement_id: entitlement.id,
     tx_hash: tx_hash.toLowerCase(),
@@ -161,15 +156,21 @@ export async function POST(request: NextRequest) {
   });
 
   if (txError) {
+    // Check for unique constraint violation (race condition / replay attack)
+    if (txError.code === '23505') {
+      // Rollback the entitlement we just created
+      await adminSupabase.from('entitlements').delete().eq('id', entitlement.id);
+      return NextResponse.json(
+        { error: 'Transaction already used for a purchase' },
+        { status: 409 }
+      );
+    }
     console.error('Transaction record error:', txError);
-    // Don't fail the purchase, just log it
+    // For other errors, don't fail the purchase, just log it
   }
 
-  // Increment download count
-  await adminSupabase
-    .from('agents')
-    .update({ download_count: (agent.download_count || 0) + 1 })
-    .eq('id', agent.id);
+  // Increment download count atomically using RPC function
+  await adminSupabase.rpc('increment_download_count', { agent_uuid: agent.id });
 
   return NextResponse.json({
     success: true,
