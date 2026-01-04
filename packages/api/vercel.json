@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/cron/verify-payments",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
