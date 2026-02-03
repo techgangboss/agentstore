@@ -1721,15 +1721,16 @@ publisherCmd
         process.exit(1);
       }
 
-      console.log(`\n✅ Agent ${result.action === 'updated' ? 'updated' : 'submitted'} successfully!`);
+      console.log(`\n✅ Agent ${result.action === 'updated' ? 'updated' : 'published'} successfully!`);
       console.log(`\n   Agent ID: ${result.agent?.agent_id || agentId}`);
       console.log(`   Version: ${result.agent?.version || version}`);
 
       if (result.action === 'created') {
-        console.log('\n   Your agent is pending review.');
-        console.log('   It will be published after approval.');
+        console.log('\n   🎉 Your agent is now live in the marketplace!');
+        console.log('   Users can install it with:');
+        console.log(`   agentstore install ${result.agent?.agent_id || agentId}`);
       } else {
-        console.log('\n   Your agent has been updated.');
+        console.log('\n   Your agent has been updated in the marketplace.');
       }
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : error}`);

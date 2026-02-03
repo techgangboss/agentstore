@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Create new agent
+  // Create new agent - auto-publish immediately
   const { data: agent, error: createError } = await adminSupabase
     .from('agents')
     .insert({
@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
       description: data.description,
       version: data.version,
       manifest,
-      is_published: false, // Requires manual approval
+      is_published: true, // Auto-publish - no review required
     })
     .select('agent_id, name, version, created_at')
     .single();
@@ -273,6 +273,6 @@ export async function POST(request: NextRequest) {
     success: true,
     action: 'created',
     agent,
-    message: 'Agent submitted for review. It will be published after approval.',
+    message: 'Agent published! It is now available in the marketplace.',
   });
 }
