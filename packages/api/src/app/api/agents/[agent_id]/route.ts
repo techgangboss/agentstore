@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 
 // GET /api/agents/[agent_id] - Get agent details
 export async function GET(
@@ -8,8 +8,8 @@ export async function GET(
 ) {
   const { agent_id } = params;
 
-  // Use admin client to bypass any caching issues
-  const supabase = createAdminClient();
+  // Use regular client - RLS allows public reads on published agents
+  const supabase = createClient();
 
   const { data: agent, error } = await supabase
     .from('agents')

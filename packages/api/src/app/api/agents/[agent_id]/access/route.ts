@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase';
+import { createClient, createAdminClient } from '@/lib/supabase';
 import { createPaymentRequired } from '@/lib/x402';
 
 // Facilitator endpoint - set when facilitator is deployed
@@ -23,7 +23,8 @@ export async function GET(
   const walletAddress = request.headers.get('X-Wallet-Address')?.toLowerCase();
   const paymentHeader = request.headers.get('X-Payment');
 
-  const supabase = createAdminClient();
+  // Use regular client for reads (RLS allows public reads)
+  const supabase = createClient();
 
   // Get agent details
   const { data: agent, error } = await supabase
@@ -89,9 +90,10 @@ export async function GET(
     try {
       const paymentProof = JSON.parse(paymentHeader);
 
-      // Verify the payment proof
+      // Verify the payment proof (uses admin client for writes)
+      const adminSupabase = createAdminClient();
       const verified = await verifyPaymentProof(
-        supabase,
+        adminSupabase,
         paymentProof,
         agent_id,
         walletAddress,
