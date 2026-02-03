@@ -1,23 +1,22 @@
 # AgentStore
 
-An open-source marketplace for Claude Code plugins with cryptocurrency payments.
+An open-source marketplace for Claude Code plugins with gasless USDC payments.
 
-**One-line:** Users browse, pay, and install MCP-backed agents directly from Claude Code — no manual configuration required.
+**One-line:** Users browse, pay, and install MCP-backed agents directly from Claude Code — with gasless USDC payments via the x402 protocol.
 
-## Project Status: Beta (85% Complete)
+## Project Status: 75% Complete
 
-| Category | Status | Grade |
+| Category | Status | Notes |
 |----------|--------|-------|
-| Core Infrastructure | ✅ Complete | A |
-| Payment System | ✅ Complete | A |
-| Security | ✅ Complete | A |
-| Developer Experience | ⚠️ Needs npm publish | B+ |
-| Documentation | ✅ Complete | A |
-| **Overall** | **Production-Ready MVP** | **A-** |
+| Core Infrastructure | ✅ Complete | API, CLI, Gateway |
+| Payment Protocol | ✅ Designed | x402 types, 402 flow, permits |
+| x402 Facilitator | ⏳ Pending | Contract needed for gasless payments |
+| Landing Page | ⏳ Pending | agentstore.dev |
+| **Overall** | **MVP Ready** | Facilitator unlocks payments |
 
 ---
 
-## User Flow: From Install to Agent Access
+## User Flow
 
 ### Step 1: Install the Plugin
 ```bash
@@ -28,56 +27,69 @@ cd agentstore && npm install && npm run build
 # Setup gateway in Claude Code
 node packages/cli/dist/index.js gateway-setup
 
-# Restart Claude Code to load the gateway MCP server
+# Restart Claude Code to load the gateway
 ```
 
 ### Step 2: Browse the Marketplace
 ```bash
-agentstore browse
-
-# Or use the slash command:
-/browse
+node packages/cli/dist/index.js browse
 ```
-- Lists all available agents with prices
-- Filter by category or search query
-- Shows publisher, version, and tools
 
 ### Step 3: Install an Agent
 ```bash
-agentstore install publisher.agent-name --pay
+# Free agents - install immediately
+node packages/cli/dist/index.js install techgangboss.wallet-assistant
+
+# Paid agents - triggers x402 payment flow
+node packages/cli/dist/index.js install publisher.paid-agent --pay
 ```
 
-**For FREE agents:** Installs immediately.
-
-**For PAID agents with insufficient funds:**
-1. **Auto-create wallet** (if none exists) — generates keypair silently in background
-2. **Trigger funding** — opens Coinbase Onramp with pre-filled wallet address
-3. **Wait for funds** — polls balance until ETH arrives
-4. **Confirm transaction** — prompts user to approve spend
-5. **Send payment** — signs and broadcasts ETH transaction
-6. **Verify on-chain** — API confirms payment via mev-commit (~100ms)
-7. **Complete install** — writes routes, entitlements, and skill files
-
-The entire flow is triggered automatically when you try to install a paid agent. No separate wallet setup required.
+**Paid Agent Flow:**
+1. API returns `402 Payment Required` with USDC amount
+2. CLI creates wallet (if needed) and prompts for permit signature
+3. User signs ERC-2612 permit (gasless, no ETH needed)
+4. Permit submitted to facilitator for execution
+5. Facilitator transfers USDC and returns proof
+6. API verifies payment and grants entitlement
+7. Agent installed with routes and skill files
 
 ### Step 4: Use the Agent
-After installation, the agent's tools are immediately available in Claude Code:
-- Gateway MCP server routes tool calls to publisher endpoints
-- Auth tokens attached automatically for paid agents
-- No restart required — tools appear instantly
+Tools available immediately in Claude Code via the gateway MCP server.
 
-### Managing Agents
-```bash
-# List installed agents
-agentstore list
+---
 
-# Uninstall an agent
-agentstore uninstall publisher.agent-name
+## x402 Payment Protocol
 
-# Check wallet (created automatically during first paid install)
-agentstore wallet balance
-agentstore wallet history
+AgentStore uses gasless USDC payments on Ethereum mainnet:
+
 ```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Gasless Payment Flow                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. User requests paid agent                                    │
+│                    ↓                                            │
+│  2. API returns 402 with: amount, recipient, nonce              │
+│                    ↓                                            │
+│  3. User signs ERC-2612 permit (gasless signature)              │
+│                    ↓                                            │
+│  4. Permit sent to x402 Facilitator                             │
+│                    ↓                                            │
+│  5. Facilitator executes:                                       │
+│     - permit(user, facilitator, amount)                         │
+│     - transferFrom(user, publisher, amount)                     │
+│                    ↓                                            │
+│  6. Facilitator returns proof to API                            │
+│                    ↓                                            │
+│  7. API grants entitlement, user gets agent                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why gasless?**
+- Users only need USDC, no ETH for gas
+- Single signature UX (no approve + transfer)
+- Facilitator pays gas, optionally recoups from payment
 
 ---
 
@@ -90,169 +102,47 @@ agentstore wallet history
 │  │   Plugin    │───▶│   CLI           │───▶│   Gateway MCP      │  │
 │  │  Commands   │    │  (agentstore)   │    │   Server           │  │
 │  └─────────────┘    └─────────────────┘    └────────────────────┘  │
-│        │                    │                        │              │
-└────────│────────────────────│────────────────────────│──────────────┘
+└─────────────────────────────────────────────────────────────────────┘
          │                    │                        │
          ▼                    ▼                        ▼
 ┌─────────────────┐  ┌─────────────────┐    ┌─────────────────────┐
 │  Marketplace    │  │  ~/.agentstore/ │    │  Publisher MCP      │
-│  API (Vercel)   │  │  routes.json    │    │  Servers            │
-│                 │  │  entitlements   │    │  (remote endpoints) │
-└─────────────────┘  │  wallet.json    │    └─────────────────────┘
-         │           └─────────────────┘
+│  API            │  │  routes.json    │    │  Servers            │
+│                 │  │  entitlements   │    │                     │
+└─────────────────┘  └─────────────────┘    └─────────────────────┘
+         │
          ▼
-┌─────────────────┐
-│   Supabase      │
-│   (Postgres)    │
-└─────────────────┘
+┌─────────────────┐         ┌─────────────────┐
+│   Supabase      │         │  x402           │
+│   (Postgres)    │◀───────▶│  Facilitator    │
+└─────────────────┘         └─────────────────┘
 ```
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| `packages/api` | Next.js API deployed to Vercel. Handles agent registry, search, and purchase verification. |
-| `packages/cli` | Command-line tool for browsing, installing, and managing agents. Writes local config files. |
-| `packages/gateway` | Local MCP server that routes tool calls to publisher endpoints and attaches auth tokens. |
-| `packages/wallet` | Local Ethereum wallet with AES-256 encryption, spend limits, and transaction history. |
-| `packages/wallet-agent` | Example free agent that exposes wallet query tools via MCP. |
-| `packages/plugin` | Claude Code plugin with slash commands (`/browse`, `/install-agent`, `/wallet`, `/my-agents`). |
-| `packages/common` | Shared TypeScript types, Zod validators, and Result utilities. |
-
-## Features
-
-### Marketplace API
-- **Agent Registry**: Publishers list agents with manifests defining tools, pricing, and MCP endpoints.
-- **Search & Filter**: Query agents by name, description, or tags.
-- **Purchase Verification**: Validates ETH payments on-chain via mev-commit RPC with preconfirmation support.
-- **Rate Limiting**: 60 req/min general, 10 req/min for purchases.
-- **RLS Security**: All database tables have Row Level Security enabled.
-
-### CLI (`agentstore`)
-- **browse**: List agents from the marketplace with search and tag filtering.
-- **install**: Fetch agent manifest, write gateway routes, save entitlements, create skill files.
-- **list**: Show installed agents and their available tools.
-- **uninstall**: Remove routes, entitlements, and skill files.
-- **config**: Display configuration paths and gateway status.
-- **gateway-setup**: Add the gateway MCP server to Claude's `~/.claude/mcp.json`.
-
-### Gateway MCP Server
-- **Tool Routing**: Proxies tool calls to publisher MCP endpoints based on `routes.json`.
-- **Auth Injection**: Attaches entitlement tokens to requests for paid agents.
-- **Tool Discovery**: Exposes all installed agent tools to Claude via `ListTools`.
-- **Validation**: Zod schemas validate route configs; path traversal protection on config files.
-
-### Wallet
-- **Key Generation**: Creates Ethereum keypairs locally using viem.
-- **Encryption**: AES-256-GCM with PBKDF2 key derivation (100k iterations).
-- **OS Keychain**: Stores encryption password in macOS Keychain / Linux Secret Service.
-- **Spend Limits**: Per-transaction ($100), daily ($500), weekly ($2000) caps.
-- **Publisher Allowlist**: Optionally restrict payments to approved addresses.
-- **mev-commit RPC**: Uses preconfirmations for faster payment UX.
-
-### Database (Supabase)
-- **Tables**: `publishers`, `agents`, `agent_versions`, `entitlements`, `transactions`, `tags`, `agent_tags`
-- **Indexes**: Optimized for download count, created_at, featured agents, wallet lookups.
-- **Atomic Purchases**: `atomic_purchase()` function prevents race conditions with row-level locking.
+| `packages/api` | Next.js API on Vercel. Agent registry, 402 flow, payment verification. |
+| `packages/cli` | CLI for browsing, installing, and managing agents. |
+| `packages/gateway` | Local MCP server routing tool calls to publishers. |
+| `packages/wallet` | Local Ethereum wallet with encryption. |
+| `packages/common` | Shared types including x402 payment protocol. |
+| `packages/plugin` | Claude Code plugin with slash commands. |
 
 ## Local Config Files
 
 ```
 ~/.agentstore/
-├── routes.json        # Gateway routing: agent → MCP endpoint + tools
-├── entitlements.json  # Auth tokens for paid agents
-├── wallet.json        # Wallet address, network, spend limits
+├── routes.json        # Gateway routing config
+├── entitlements.json  # Access tokens for paid agents
+├── wallet.json        # Wallet address and config
 ├── wallet.keystore    # Encrypted private key
-└── tx_history.json    # Transaction records
+└── pending_payments/  # Permits awaiting facilitator
 
 ~/.claude/
-├── mcp.json           # MCP server configuration (gateway registered here)
-└── skills/agentstore/ # Skill files for installed agents
+├── mcp.json           # Gateway MCP registration
+└── skills/agentstore/ # Skill files for agents
 ```
-
-## Quick Start
-
-```bash
-# Clone and install
-git clone https://github.com/techgangboss/agentstore.git
-cd agentstore
-npm install
-
-# Build all packages
-npm run build
-
-# Browse marketplace
-node packages/cli/dist/index.js browse
-
-# Install a free agent
-node packages/cli/dist/index.js install techgangboss.wallet-assistant
-
-# Setup gateway in Claude's MCP config
-node packages/cli/dist/index.js gateway-setup
-
-# Restart Claude Code to load the gateway
-```
-
-## Publisher Registration
-
-To publish agents on AgentStore, you need to register as a publisher:
-
-```bash
-# First, create a wallet (if you haven't already)
-agentstore wallet setup
-
-# Register as a publisher
-agentstore publisher register \
-  --id my-company \
-  --name "My Company" \
-  --support-url https://support.mycompany.com
-
-# The CLI will sign a message with your wallet to prove ownership
-# Your payout address will be set to your wallet address
-```
-
-### Registration Requirements
-- **Publisher ID**: Lowercase alphanumeric with hyphens (e.g., `acme-corp`)
-- **Display Name**: Human-readable name shown in marketplace
-- **Payout Address**: Your wallet address (verified via signature)
-- **Support URL**: Optional link for user support
-
-### Rate Limits
-- Publisher registration: 3 requests per hour per IP
-- Agent submissions: 10 requests per minute per IP
-
-## Fiat Onramp (Credit Card → ETH)
-
-Fund your wallet with a credit card via Coinbase Onramp:
-
-```bash
-# Fund wallet (opens browser)
-agentstore wallet fund
-
-# Fund with specific amount
-agentstore wallet fund --amount 50
-
-# Fund and wait for confirmation
-agentstore wallet fund --amount 25 --wait
-
-# Just print the URL (don't open browser)
-agentstore wallet fund --no-open
-```
-
-### How It Works
-1. CLI calls the API to generate an onramp URL with your wallet address
-2. Opens Coinbase Onramp in your browser with pre-filled wallet address
-3. Complete purchase with credit card, Apple Pay, or bank transfer
-4. ETH arrives in your wallet within minutes
-
-### Server Configuration (Vercel)
-To enable fiat onramp, add the CDP Client Key to Vercel:
-
-```
-CDP_CLIENT_KEY=your-client-key-here
-```
-
-Get your Client Key from: https://portal.cdp.coinbase.com/ (API Keys tab)
 
 ## Environment Variables
 
@@ -261,84 +151,37 @@ Get your Client Key from: https://portal.cdp.coinbase.com/ (API Keys tab)
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_KEY=eyJ...
-PLATFORM_FEE_ADDRESS=0x...
-CDP_CLIENT_KEY=xxx...                           # Coinbase Onramp client key
-UPSTASH_REDIS_REST_URL=https://xxx.upstash.io   # Optional - enables persistent rate limiting
-UPSTASH_REDIS_REST_TOKEN=AXxx...                # Optional - falls back to in-memory if not set
+CDP_CLIENT_KEY=xxx                              # Coinbase Onramp
+
+# x402 Facilitator (when deployed)
+X402_FACILITATOR_ENDPOINT=https://...           # Submit permits
+X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 ```
 
-### Wallet (Optional)
-```
-AGENTSTORE_WALLET_PASSWORD=your-password  # Skip keychain prompt
-```
+---
 
-## Project Completeness
+## Remaining Work
 
-### Core Features (100%)
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Agent listing API | ✅ | Search, filter, pagination |
-| Agent detail API | ✅ | Full manifest with tools |
-| Purchase verification | ✅ | On-chain ETH verification via mev-commit |
-| Publisher registration | ✅ | Wallet signature verification |
-| Fiat onramp API | ✅ | Coinbase CDP integration |
+### High Priority
+| Task | Description |
+|------|-------------|
+| **x402 Facilitator** | Smart contract + API to execute permits and transfer USDC |
+| **Landing Page** | agentstore.dev with "Add to Claude Code" button |
 
-### CLI (100%)
-| Command | Status | Notes |
-|---------|--------|-------|
-| `browse` | ✅ | Search and filter agents |
-| `install` | ✅ | Free + paid with `--pay` flag |
-| `uninstall` | ✅ | Removes routes, entitlements, skills |
-| `list` | ✅ | Shows installed agents and tools |
-| `config` | ✅ | Displays paths and status |
-| `gateway-setup` | ✅ | Adds gateway to mcp.json |
-| `wallet setup` | ✅ | Creates encrypted wallet |
-| `wallet balance` | ✅ | Shows ETH balance |
-| `wallet fund` | ✅ | Coinbase fiat onramp |
-| `wallet history` | ✅ | Transaction history |
-| `publisher register` | ✅ | Signature-verified registration |
-| `publisher info` | ✅ | Shows publisher details |
+### Medium Priority
+| Task | Description |
+|------|-------------|
+| Publisher Dashboard | Web UI for agent management and analytics |
+| npm Publish | `npm install -g @agentstore/cli` |
+| E2E Tests | Automated testing with testnet USDC |
 
-### Gateway (100%)
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Tool routing | ✅ | Routes calls to publisher MCP |
-| Auth injection | ✅ | Attaches entitlement tokens |
-| Tool discovery | ✅ | ListTools exposes all agents |
-| Path traversal protection | ✅ | Sanitizes config paths |
-| Request timeout | ✅ | 30s default |
+### Low Priority
+| Task | Description |
+|------|-------------|
+| Subscription Billing | Recurring USDC payments |
+| Usage-Based Billing | Per-call metering |
 
-### Security (100%)
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Wallet encryption | ✅ | AES-256-GCM + PBKDF2 |
-| OS keychain | ✅ | macOS Keychain / Linux Secret Service |
-| Spend limits | ✅ | Per-tx, daily, weekly caps |
-| Input validation | ✅ | Zod schemas on all inputs |
-| Rate limiting | ✅ | Redis + in-memory fallback |
-| RLS policies | ✅ | All Supabase tables secured |
-| Atomic operations | ✅ | Row-level locking for purchases |
-
-### Database (100%)
-| Table | Status | Notes |
-|-------|--------|-------|
-| publishers | ✅ | With payout addresses |
-| agents | ✅ | With manifests |
-| agent_versions | ✅ | Version history |
-| entitlements | ✅ | Access tokens |
-| transactions | ✅ | Payment records |
-| tags / agent_tags | ✅ | Categorization |
-
-### Remaining Work (15%)
-| Item | Priority | Effort |
-|------|----------|--------|
-| npm publish CLI + Gateway | High | 2-3 hrs |
-| E2E test with real ETH | High | 2-3 hrs |
-| Agent version update API | Medium | 3-4 hrs |
-| Provision Upstash Redis | Medium | 1 hr |
-| Connector checksums | Low | 2-3 hrs |
-| Subscription billing | Low | 4-6 hrs |
-| Usage-based billing | Low | 6-8 hrs |
+---
 
 ## Agent Manifest Schema
 
@@ -349,14 +192,10 @@ AGENTSTORE_WALLET_PASSWORD=your-password  # Skip keychain prompt
   "type": "open | proprietary",
   "description": "What the agent does",
   "version": "1.0.0",
-  "publisher": {
-    "publisher_id": "publisher",
-    "display_name": "Publisher Name"
-  },
   "pricing": {
     "model": "free | one_time | subscription",
-    "amount": 0,
-    "currency": "ETH"
+    "amount": 5,
+    "currency": "USDC"
   },
   "install": {
     "gateway_routes": [
@@ -367,114 +206,52 @@ AGENTSTORE_WALLET_PASSWORD=your-password  # Skip keychain prompt
           {
             "name": "tool_name",
             "description": "What the tool does",
-            "inputSchema": { "type": "object", "properties": {} }
+            "inputSchema": { "type": "object" }
           }
         ],
-        "auth": { "type": "none | entitlement | api_key" }
+        "auth": { "type": "none | entitlement" }
       }
     ]
-  },
-  "permissions": {
-    "requires_network": true,
-    "requires_filesystem": false
   }
 }
 ```
 
-## Deployment
+---
 
-### Supabase
-- Project ID: `pqjntpkfdcfsvnnjkbny`
-- All tables RLS-enabled
-- Migrations in `supabase/migrations/`
+## Quick Start
 
-### Vercel (API)
-- URL: `https://api-inky-seven.vercel.app`
-- Auto-deploys from `main` branch
-- Environment variables configured in Vercel dashboard
+```bash
+# Clone and build
+git clone https://github.com/techgangboss/agentstore.git
+cd agentstore && npm install && npm run build
 
-## Security
+# Browse marketplace
+node packages/cli/dist/index.js browse
 
-- **Wallet encryption**: AES-256-GCM with OS keychain integration
-- **Path sanitization**: Prevents traversal attacks on config files
-- **Input validation**: Zod schemas on all API inputs
-- **HTTPS enforcement**: Production gateway rejects non-HTTPS endpoints
-- **Replay protection**: Transaction hashes are unique in database
-- **RLS policies**: Database access scoped appropriately
-- **CSP headers**: Configured in Next.js for API routes
+# Install free agent
+node packages/cli/dist/index.js install techgangboss.wallet-assistant
+
+# Setup gateway
+node packages/cli/dist/index.js gateway-setup
+
+# Restart Claude Code
+```
 
 ---
 
-## Project Report
+## Deployment
 
-### Executive Summary
-AgentStore is a **production-ready MVP** for a decentralized Claude Code plugin marketplace with cryptocurrency payments. The project implements the complete flow from browsing → payment → installation → usage, with enterprise-grade security and a seamless developer experience.
+- **API**: Vercel (`https://api-inky-seven.vercel.app`)
+- **Database**: Supabase (`pqjntpkfdcfsvnnjkbny`)
+- **Facilitator**: Pending deployment on Ethereum mainnet
 
-### Technical Achievements
+## Security
 
-**Payment Infrastructure**
-- On-chain ETH payment verification with mev-commit preconfirmations (~100ms confirmation)
-- Coinbase fiat onramp for credit card → ETH conversion
-- Local wallet with AES-256-GCM encryption and OS keychain integration
-- Spend limits to prevent accidental overspending
-
-**Security Model**
-- Zero-trust architecture: private keys never leave the device
-- Publisher verification via cryptographic signatures
+- AES-256-GCM wallet encryption with OS keychain
+- ERC-2612 permits (gasless, no private key exposure)
 - Row-level security on all database tables
-- Rate limiting with Redis (Upstash) + in-memory fallback
-- Input validation via Zod schemas on all API endpoints
-
-**Developer Experience**
-- Single `gateway-setup` command configures everything
-- Agents appear instantly after install (no restart needed)
-- Lazy wallet creation — only created when first paid agent is installed
-- Seamless funding flow — Coinbase Onramp triggered automatically on insufficient balance
-- 4-step user flow: Install Plugin → Browse → Install Agent → Use
-
-### Architecture Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| ETH over USDC | Simpler UX, no token approval required |
-| mev-commit RPC | Near-instant preconfirmations for better UX |
-| Local gateway | Keeps auth tokens secure, enables offline tool caching |
-| Supabase | Managed Postgres with built-in RLS and auth |
-| Vercel Edge | Low latency API, automatic scaling |
-
-### Metrics
-
-| Metric | Value |
-|--------|-------|
-| Lines of code | ~5,000 |
-| API endpoints | 8 |
-| CLI commands | 12 |
-| Database tables | 7 |
-| Security controls | 12 |
-| Test coverage | Manual (E2E pending) |
-
-### Grade: A- (85/100)
-
-| Category | Score | Notes |
-|----------|-------|-------|
-| Functionality | 95/100 | All core features working |
-| Security | 95/100 | Enterprise-grade encryption and validation |
-| Code Quality | 85/100 | TypeScript, Zod, clean architecture |
-| Documentation | 90/100 | Comprehensive README, inline comments |
-| DevEx | 80/100 | Needs npm publish for easy install |
-| Testing | 60/100 | Manual testing only, no automated E2E |
-
-**What elevates this project:**
-- Complete payment flow with fiat onramp
-- Production-grade security (encryption, keychain, RLS)
-- Clean separation of concerns (CLI, Gateway, API)
-- Extensible manifest schema for future features
-
-**What would make it A+:**
-- npm publish for `npm install -g @agentstore/cli`
-- Automated E2E tests with testnet ETH
-- Subscription and usage-based billing
-- Web dashboard for publishers
+- Input validation via Zod schemas
+- HTTPS enforcement in production
 
 ---
 
@@ -486,8 +263,7 @@ MIT
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Run `npm run build` and `npm run test`
-5. Submit a pull request
+3. Run `npm run build`
+4. Submit a pull request
 
-For publisher onboarding or partnership inquiries, open an issue.
+For facilitator development or partnership inquiries, open an issue.
