@@ -1624,4 +1624,183 @@ publisherCmd
     }
   });
 
+publisherCmd
+  .command('submit <manifest>')
+  .description('Submit an agent to AgentStore')
+  .option('--publish', 'Request immediate publication (requires approval)')
+  .action(async (manifestPath: string, options: { publish?: boolean }) => {
+    try {
+      if (!walletExists()) {
+        console.log('No wallet configured. Run: agentstore wallet setup');
+        process.exit(1);
+      }
+
+      const config = loadWalletConfig();
+      if (!config) {
+        console.log('Failed to load wallet config');
+        process.exit(1);
+      }
+
+      const privateKey = await loadPrivateKey();
+      if (!privateKey) {
+        console.log('Failed to load wallet private key');
+        process.exit(1);
+      }
+
+      // Read and parse manifest file
+      const fullPath = path.resolve(manifestPath);
+      if (!fs.existsSync(fullPath)) {
+        console.log(`Manifest file not found: ${fullPath}`);
+        process.exit(1);
+      }
+
+      let manifest: Record<string, unknown>;
+      try {
+        manifest = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+      } catch (e) {
+        console.log(`Invalid JSON in manifest: ${e instanceof Error ? e.message : e}`);
+        process.exit(1);
+      }
+
+      // Validate required fields
+      const required = ['agent_id', 'name', 'type', 'description', 'version', 'pricing', 'install'];
+      for (const field of required) {
+        if (!manifest[field]) {
+          console.log(`Missing required field: ${field}`);
+          process.exit(1);
+        }
+      }
+
+      const agentId = manifest.agent_id as string;
+      const version = manifest.version as string;
+
+      console.log('\n📦 Submitting Agent to AgentStore\n');
+      console.log(`   Agent ID: ${agentId}`);
+      console.log(`   Name: ${manifest.name}`);
+      console.log(`   Version: ${version}`);
+      console.log(`   Type: ${manifest.type}`);
+
+      const pricing = manifest.pricing as { model: string; amount?: number };
+      console.log(`   Pricing: ${pricing.model === 'free' ? 'Free' : `$${pricing.amount || 0}`}`);
+
+      // Create and sign the submission message
+      const message = `Submit agent to AgentStore: ${agentId} v${version}`;
+      const account = privateKeyToAccount(privateKey);
+
+      console.log('\n🔐 Signing submission...');
+      const signature = await account.signMessage({ message });
+
+      // Submit to API
+      console.log('📤 Uploading to marketplace...');
+      const response = await fetch(`${API_BASE}/api/publishers/agents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...manifest,
+          tags: manifest.tags || [],
+          permissions: manifest.permissions || { requires_network: false, requires_filesystem: false },
+          signature,
+          message,
+        }),
+      });
+
+      const result = await response.json() as {
+        success?: boolean;
+        error?: string;
+        details?: unknown;
+        action?: string;
+        agent?: { agent_id: string; version: string };
+        message?: string;
+      };
+
+      if (!response.ok) {
+        console.log(`\n❌ Submission failed: ${result.error || response.statusText}`);
+        if (result.details) {
+          console.log('   Details:', JSON.stringify(result.details, null, 2));
+        }
+        process.exit(1);
+      }
+
+      console.log(`\n✅ Agent ${result.action === 'updated' ? 'updated' : 'submitted'} successfully!`);
+      console.log(`\n   Agent ID: ${result.agent?.agent_id || agentId}`);
+      console.log(`   Version: ${result.agent?.version || version}`);
+
+      if (result.action === 'created') {
+        console.log('\n   Your agent is pending review.');
+        console.log('   It will be published after approval.');
+      } else {
+        console.log('\n   Your agent has been updated.');
+      }
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+  });
+
+publisherCmd
+  .command('init')
+  .description('Create a sample agent manifest file')
+  .option('-o, --output <file>', 'Output file path', 'agent-manifest.json')
+  .action((options: { output: string }) => {
+    const sampleManifest = {
+      agent_id: 'your-publisher-id.your-agent-name',
+      name: 'Your Agent Name',
+      type: 'open',
+      description: 'A brief description of what your agent does (10-1000 characters)',
+      version: '1.0.0',
+      pricing: {
+        model: 'free',
+        amount: 0,
+        currency: 'USD',
+      },
+      install: {
+        agent_wrapper: {
+          format: 'markdown',
+          entrypoint: 'agent.md',
+        },
+        gateway_routes: [
+          {
+            route_id: 'default',
+            mcp_endpoint: 'https://your-mcp-server.com/endpoint',
+            tools: [
+              {
+                name: 'example_tool',
+                description: 'What this tool does',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    param1: {
+                      type: 'string',
+                      description: 'Description of param1',
+                    },
+                  },
+                  required: ['param1'],
+                },
+              },
+            ],
+            auth: {
+              type: 'none',
+            },
+          },
+        ],
+      },
+      permissions: {
+        requires_network: true,
+        requires_filesystem: false,
+        notes: 'Optional notes about permissions',
+      },
+      tags: ['Productivity', 'Data'],
+    };
+
+    const outputPath = path.resolve(options.output);
+    fs.writeFileSync(outputPath, JSON.stringify(sampleManifest, null, 2));
+
+    console.log(`\n✅ Sample manifest created: ${outputPath}`);
+    console.log('\nNext steps:');
+    console.log('1. Edit the manifest with your agent details');
+    console.log('2. Update agent_id to: your-publisher-id.agent-name');
+    console.log('3. Set up your MCP endpoint');
+    console.log('4. Submit with: agentstore publisher submit ' + options.output);
+  });
+
 program.parse();
