@@ -4,6 +4,10 @@ export const USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as cons
 export const USDC_DECIMALS = 6;
 export const CHAIN_ID = 1;
 
+// Platform fee configuration
+export const PLATFORM_WALLET = '0x71483B877c40eb2BF99230176947F5ec1c2351cb' as const;
+export const PLATFORM_FEE_PERCENT = 20; // 20% to platform, 80% to publisher
+
 export interface X402PaymentRequired {
   amount: string;
   currency: 'USDC';
@@ -16,6 +20,15 @@ export interface X402PaymentRequired {
   accepts: X402PaymentMethod[];
   nonce: string;
   expires_at: string;
+  // Fee breakdown
+  fee_split: {
+    platform_address: string;
+    platform_amount: string;
+    platform_percent: number;
+    publisher_address: string;
+    publisher_amount: string;
+    publisher_percent: number;
+  };
 }
 
 export type X402PaymentMethod =
@@ -88,6 +101,10 @@ export function createPaymentRequired(params: {
     token: USDC_ADDRESS,
   });
 
+  // Calculate fee split: 20% platform, 80% publisher
+  const platformAmount = params.amount * (PLATFORM_FEE_PERCENT / 100);
+  const publisherAmount = params.amount - platformAmount;
+
   return {
     amount: params.amount.toFixed(2),
     currency: 'USDC',
@@ -100,5 +117,13 @@ export function createPaymentRequired(params: {
     accepts,
     nonce: generateNonce(),
     expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    fee_split: {
+      platform_address: PLATFORM_WALLET,
+      platform_amount: platformAmount.toFixed(2),
+      platform_percent: PLATFORM_FEE_PERCENT,
+      publisher_address: params.recipient,
+      publisher_amount: publisherAmount.toFixed(2),
+      publisher_percent: 100 - PLATFORM_FEE_PERCENT,
+    },
   };
 }

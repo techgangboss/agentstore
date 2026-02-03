@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { z } from 'zod';
 import type { X402PaymentProof } from '@/lib/x402';
+import { PLATFORM_WALLET, PLATFORM_FEE_PERCENT } from '@/lib/x402';
 
 // Facilitator endpoint - will process permits when deployed
 const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || null;
@@ -90,6 +91,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Calculate fee split: 20% platform, 80% publisher
+  const publisherWallet = agent.publisher?.wallet_address || payment_required.recipient;
+  const platformAmount = expectedAmount * (PLATFORM_FEE_PERCENT / 100);
+  const publisherAmount = expectedAmount - platformAmount;
+
+  const feeSplit = {
+    platform_address: PLATFORM_WALLET,
+    platform_amount: platformAmount.toFixed(2),
+    platform_percent: PLATFORM_FEE_PERCENT,
+    publisher_address: publisherWallet,
+    publisher_amount: publisherAmount.toFixed(2),
+    publisher_percent: 100 - PLATFORM_FEE_PERCENT,
+  };
+
   // If facilitator is available, submit permit for processing
   // Facilitator handles: execute permit, transfer USDC, return proof
   if (FACILITATOR_ENDPOINT) {
@@ -101,6 +116,7 @@ export async function POST(request: NextRequest) {
           payment_required,
           permit,
           payer: wallet_address,
+          fee_split: feeSplit,
         }),
       });
 
@@ -158,6 +174,7 @@ export async function POST(request: NextRequest) {
         r: permit.r,
         s: permit.s,
       },
+      fee_split: feeSplit,
       status: 'pending',
       created_at: new Date().toISOString(),
       expires_at: payment_required.expires_at,

@@ -2,17 +2,28 @@
 
 An open-source marketplace for Claude Code plugins with gasless USDC payments.
 
-**One-line:** Users browse, pay, and install MCP-backed agents directly from Claude Code — with gasless USDC payments via the x402 protocol.
+**One-liner:** Browse, pay, and install MCP-backed agents directly from Claude Code — with gasless USDC payments via the x402 protocol.
 
-## Project Status: 75% Complete
+## Project Status: MVP Ready
 
 | Category | Status | Notes |
 |----------|--------|-------|
-| Core Infrastructure | ✅ Complete | API, CLI, Gateway |
-| Payment Protocol | ✅ Designed | x402 types, 402 flow, permits |
+| Core Infrastructure | ✅ Complete | API, CLI, Gateway, Publisher Flow |
+| Payment Protocol | ✅ Complete | x402 types, 402 flow, permits, 20% platform fee |
+| Marketplace API | ✅ Live | `https://api.agentstore.dev` |
 | x402 Facilitator | ⏳ Pending | Contract needed for gasless payments |
 | Landing Page | ⏳ Pending | agentstore.dev |
-| **Overall** | **MVP Ready** | Facilitator unlocks payments |
+| npm Publish | ⏳ Pending | `@agentstore/cli` |
+
+---
+
+## Features
+
+- **Gasless USDC Payments** — Users sign ERC-2612 permits, no ETH needed
+- **Instant Agent Installation** — Tools available immediately via MCP gateway
+- **Publisher Monetization** — 80/20 revenue split (publisher/platform)
+- **Wallet Integration** — Local encrypted wallet with Coinbase Onramp
+- **Free & Paid Agents** — Flexible pricing models
 
 ---
 
@@ -49,12 +60,58 @@ node packages/cli/dist/index.js install publisher.paid-agent --pay
 2. CLI creates wallet (if needed) and prompts for permit signature
 3. User signs ERC-2612 permit (gasless, no ETH needed)
 4. Permit submitted to facilitator for execution
-5. Facilitator transfers USDC and returns proof
+5. Facilitator transfers USDC (80% publisher, 20% platform)
 6. API verifies payment and grants entitlement
 7. Agent installed with routes and skill files
 
 ### Step 4: Use the Agent
 Tools available immediately in Claude Code via the gateway MCP server.
+
+---
+
+## Platform Fee
+
+AgentStore takes a **20% platform fee** on all transactions:
+
+| Party | Share | Example ($10 agent) |
+|-------|-------|---------------------|
+| Publisher | 80% | $8.00 |
+| Platform | 20% | $2.00 |
+
+Fee breakdown is included in every 402 response:
+```json
+{
+  "payment": {
+    "amount": "10.00",
+    "fee_split": {
+      "platform_address": "0x71483B877c40eb2BF99230176947F5ec1c2351cb",
+      "platform_amount": "2.00",
+      "platform_percent": 20,
+      "publisher_address": "0x...",
+      "publisher_amount": "8.00",
+      "publisher_percent": 80
+    }
+  }
+}
+```
+
+---
+
+## For Publishers
+
+Want to monetize your Claude Code agents? See the [Publisher Documentation](docs/PUBLISHER.md).
+
+Quick start:
+```bash
+# 1. Generate manifest template
+node packages/cli/dist/index.js publisher init
+
+# 2. Edit manifest with your agent details
+vim my-agent.json
+
+# 3. Submit to marketplace
+node packages/cli/dist/index.js publisher submit my-agent.json
+```
 
 ---
 
@@ -69,7 +126,7 @@ AgentStore uses gasless USDC payments on Ethereum mainnet:
 │                                                                 │
 │  1. User requests paid agent                                    │
 │                    ↓                                            │
-│  2. API returns 402 with: amount, recipient, nonce              │
+│  2. API returns 402 with: amount, recipient, fee_split, nonce   │
 │                    ↓                                            │
 │  3. User signs ERC-2612 permit (gasless signature)              │
 │                    ↓                                            │
@@ -77,7 +134,8 @@ AgentStore uses gasless USDC payments on Ethereum mainnet:
 │                    ↓                                            │
 │  5. Facilitator executes:                                       │
 │     - permit(user, facilitator, amount)                         │
-│     - transferFrom(user, publisher, amount)                     │
+│     - transferFrom(user, platform, 20%)                         │
+│     - transferFrom(user, publisher, 80%)                        │
 │                    ↓                                            │
 │  6. Facilitator returns proof to API                            │
 │                    ↓                                            │
@@ -89,7 +147,7 @@ AgentStore uses gasless USDC payments on Ethereum mainnet:
 **Why gasless?**
 - Users only need USDC, no ETH for gas
 - Single signature UX (no approve + transfer)
-- Facilitator pays gas, optionally recoups from payment
+- Facilitator pays gas, recoups from platform fee
 
 ---
 
@@ -160,12 +218,25 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 
 ---
 
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/agents` | GET | List all published agents |
+| `/api/agents/[id]` | GET | Get agent details |
+| `/api/agents/[id]/access` | GET | Check access, returns 402 if payment needed |
+| `/api/payments/submit` | POST | Submit signed permit for payment |
+| `/api/publishers/register` | POST | Register as publisher |
+| `/api/publishers/agents` | POST | Submit new agent |
+
+---
+
 ## Remaining Work
 
 ### High Priority
 | Task | Description |
 |------|-------------|
-| **x402 Facilitator** | Smart contract + API to execute permits and transfer USDC |
+| **x402 Facilitator** | Smart contract + API to execute permits and split payments |
 | **Landing Page** | agentstore.dev with "Add to Claude Code" button |
 
 ### Medium Priority
@@ -195,7 +266,7 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
   "pricing": {
     "model": "free | one_time | subscription",
     "amount": 5,
-    "currency": "USDC"
+    "currency": "USD"
   },
   "install": {
     "gateway_routes": [
@@ -241,8 +312,8 @@ node packages/cli/dist/index.js gateway-setup
 
 ## Deployment
 
-- **API**: Vercel (`https://api-inky-seven.vercel.app`)
-- **Database**: Supabase (`pqjntpkfdcfsvnnjkbny`)
+- **API**: Vercel (`https://api.agentstore.dev`)
+- **Database**: Supabase (PostgreSQL with RLS)
 - **Facilitator**: Pending deployment on Ethereum mainnet
 
 ## Security
