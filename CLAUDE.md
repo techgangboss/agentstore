@@ -10,7 +10,7 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 
 ### Completed
 - [x] Marketplace API (browse, search, agent details)
-- [x] CLI (install, uninstall, browse, list, wallet)
+- [x] CLI (install, uninstall, browse, list, wallet, publisher)
 - [x] Gateway MCP server (tool routing, auth injection)
 - [x] Local wallet (AES-256-GCM encryption, OS keychain)
 - [x] Coinbase Onramp integration (fiat to crypto)
@@ -18,12 +18,15 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 - [x] 402 Payment Required API flow
 - [x] Permit signing infrastructure (ERC-2612)
 - [x] Facilitator-ready payment abstraction
+- [x] Publisher registration and agent submission
+- [x] 20% platform fee (80/20 split with publishers)
 
 ### In Progress / Blocked
 - [ ] **x402 Facilitator Contract** - Executes USDC transfers from signed permits
 - [ ] Landing page with plugin install button
 
 ### Not Started
+- [ ] **Hosted Execution** - Serverless runtime so publishers don't need to host MCP endpoints
 - [ ] Publisher dashboard
 - [ ] Automated tests
 - [ ] npm publish

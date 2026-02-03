@@ -242,6 +242,7 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 ### Medium Priority
 | Task | Description |
 |------|-------------|
+| **Hosted Execution** | Serverless runtime for publisher tools (no self-hosting required) |
 | Publisher Dashboard | Web UI for agent management and analytics |
 | npm Publish | `npm install -g @agentstore/cli` |
 | E2E Tests | Automated testing with testnet USDC |
