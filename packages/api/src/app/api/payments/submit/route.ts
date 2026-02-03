@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { z } from 'zod';
-import type { X402PaymentProof } from '@agentstore/common';
+import type { X402PaymentProof } from '@/lib/x402';
 
 // Facilitator endpoint - will process permits when deployed
 const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || null;

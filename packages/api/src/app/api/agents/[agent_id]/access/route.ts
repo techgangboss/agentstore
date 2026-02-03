@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
-import {
-  createPaymentRequired,
-  USDC_ADDRESS,
-  CHAIN_ID,
-  type X402PaymentRequired,
-} from '@agentstore/common';
+import { createPaymentRequired } from '@/lib/x402';
 
 // Facilitator endpoint - set when facilitator is deployed
 const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || null;
