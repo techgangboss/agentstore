@@ -5,6 +5,9 @@ import { z } from 'zod';
 // Mark as dynamic since we use searchParams
 export const dynamic = 'force-dynamic';
 
+// Default payout address (platform wallet) if publisher provides invalid address
+const DEFAULT_PAYOUT_ADDRESS = '0x71483B877c40eb2BF99230176947F5ec1c2351cb';
+
 const RegisterPublisherSchema = z.object({
   name: z
     .string()
@@ -12,10 +15,16 @@ const RegisterPublisherSchema = z.object({
     .max(50)
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/, 'Must be lowercase alphanumeric with hyphens, used as unique identifier'),
   display_name: z.string().min(1).max(100),
-  payout_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Must be valid Ethereum address'),
+  payout_address: z.string().optional(),
   email: z.string().email().optional(),
   support_url: z.string().url().optional(),
 });
+
+// Validate Ethereum address format
+function isValidEthAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
 
 // GET /api/publishers - List publishers (public)
 export async function GET(request: NextRequest) {
@@ -71,7 +80,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { name, display_name, payout_address, email, support_url } = parsed.data;
+  const { name, display_name, payout_address: rawPayoutAddress, email, support_url } = parsed.data;
+
+  // Validate payout address, default to platform wallet if invalid
+  const payout_address = isValidEthAddress(rawPayoutAddress)
+    ? rawPayoutAddress!.toLowerCase()
+    : DEFAULT_PAYOUT_ADDRESS;
 
   // Use name as the unique publisher_id
   const publisher_id = name;
@@ -98,11 +112,11 @@ export async function POST(request: NextRequest) {
     .insert({
       publisher_id,
       display_name,
-      payout_address: payout_address.toLowerCase(),
+      payout_address,
       email: email || null,
       support_url: support_url || null,
     })
-    .select('publisher_id, display_name, email, support_url, created_at')
+    .select('publisher_id, display_name, payout_address, email, support_url, created_at')
     .single();
 
   if (createError) {
@@ -110,9 +124,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create publisher' }, { status: 500 });
   }
 
+  const usedDefaultAddress = payout_address === DEFAULT_PAYOUT_ADDRESS;
+
   return NextResponse.json({
     success: true,
     publisher,
-    message: 'Publisher registered successfully. You can now submit agents.',
+    message: usedDefaultAddress
+      ? 'Publisher registered. Note: Invalid wallet address provided, using platform wallet as default. Update your payout address to receive payments.'
+      : 'Publisher registered successfully. You can now submit agents.',
   });
 }
