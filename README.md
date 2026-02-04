@@ -11,9 +11,9 @@ An open-source marketplace for Claude Code plugins with gasless USDC payments.
 | Core Infrastructure | ✅ Complete | API, CLI, Gateway, Publisher Flow |
 | Payment Protocol | ✅ Complete | x402 types, 402 flow, permits, 20% platform fee |
 | Marketplace API | ✅ Live | `https://api.agentstore.dev` |
+| Landing Page | ✅ Live | `https://agentstore.tools` |
+| npm Package | ✅ Published | `npm install -g @agentstore/cli` |
 | x402 Facilitator | ⏳ Pending | Contract needed for gasless payments |
-| Landing Page | ⏳ Pending | agentstore.dev |
-| npm Publish | ⏳ Pending | `@agentstore/cli` |
 
 ---
 
@@ -30,30 +30,30 @@ An open-source marketplace for Claude Code plugins with gasless USDC payments.
 
 ## User Flow
 
-### Step 1: Install the Plugin
+### Step 1: Install the CLI
 ```bash
-# Clone and build (until npm publish)
-git clone https://github.com/techgangboss/agentstore.git
-cd agentstore && npm install && npm run build
+npm install -g @agentstore/cli
+```
 
-# Setup gateway in Claude Code
-node packages/cli/dist/index.js gateway-setup
+### Step 2: Setup the Gateway
+```bash
+agentstore gateway-setup
 
 # Restart Claude Code to load the gateway
 ```
 
-### Step 2: Browse the Marketplace
+### Step 3: Browse the Marketplace
 ```bash
-node packages/cli/dist/index.js browse
+agentstore browse
 ```
 
-### Step 3: Install an Agent
+### Step 4: Install an Agent
 ```bash
 # Free agents - install immediately
-node packages/cli/dist/index.js install techgangboss.wallet-assistant
+agentstore install techgangboss.wallet-assistant
 
 # Paid agents - triggers x402 payment flow
-node packages/cli/dist/index.js install publisher.paid-agent --pay
+agentstore install publisher.paid-agent --pay
 ```
 
 **Paid Agent Flow:**
@@ -294,20 +294,19 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 ## Quick Start
 
 ```bash
-# Clone and build
-git clone https://github.com/techgangboss/agentstore.git
-cd agentstore && npm install && npm run build
-
-# Browse marketplace
-node packages/cli/dist/index.js browse
-
-# Install free agent
-node packages/cli/dist/index.js install techgangboss.wallet-assistant
+# Install CLI
+npm install -g @agentstore/cli
 
 # Setup gateway
-node packages/cli/dist/index.js gateway-setup
+agentstore gateway-setup
 
 # Restart Claude Code
+
+# Browse marketplace
+agentstore browse
+
+# Install your first agent
+agentstore install techgangboss.wallet-assistant
 ```
 
 ---
@@ -315,6 +314,7 @@ node packages/cli/dist/index.js gateway-setup
 ## Deployment
 
 - **Website**: https://agentstore.tools
+- **CLI**: `npm install -g @agentstore/cli`
 - **API**: Vercel (`https://api.agentstore.dev`)
 - **Database**: Supabase (PostgreSQL with RLS)
 - **Facilitator**: Pending deployment on Ethereum mainnet

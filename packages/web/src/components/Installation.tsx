@@ -57,18 +57,18 @@ export function Installation() {
         <div className="space-y-6">
           <CodeBlock
             step={1}
-            title="Clone and build"
-            code="git clone https://github.com/techgangboss/agentstore.git && cd agentstore && npm install && npm run build"
+            title="Install the CLI"
+            code="npm install -g @agentstore/cli"
           />
           <CodeBlock
             step={2}
             title="Setup the gateway"
-            code="node packages/cli/dist/index.js gateway-setup"
+            code="agentstore gateway-setup"
           />
           <CodeBlock
             step={3}
             title="Install your first agent"
-            code="node packages/cli/dist/index.js install techgangboss.wallet-assistant"
+            code="agentstore install techgangboss.wallet-assistant"
           />
         </div>
 

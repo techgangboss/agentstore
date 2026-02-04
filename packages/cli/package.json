@@ -1,7 +1,7 @@
 {
   "name": "@agentstore/cli",
   "version": "1.0.0",
-  "description": "AgentStore CLI - Install and manage marketplace agents",
+  "description": "AgentStore CLI - Browse, install, and pay for Claude Code agents",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -10,7 +10,32 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "mcp",
+    "agents",
+    "marketplace",
+    "ai",
+    "cli"
+  ],
+  "author": "AgentStore",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/techgangboss/agentstore.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://agentstore.tools",
+  "bugs": {
+    "url": "https://github.com/techgangboss/agentstore/issues"
   },
   "dependencies": {
     "commander": "^12.0.0",
@@ -24,5 +49,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
