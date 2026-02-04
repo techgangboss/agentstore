@@ -268,6 +268,9 @@ VITE_API_URL=https://api-inky-seven.vercel.app
 | `/api/publishers/agents/simple` | POST | Submit agent via web form (Google auth) |
 | `/api/publishers` | POST | Register publisher (CLI, wallet signature) |
 | `/api/publishers/agents` | POST | Submit agent (CLI, wallet signature) |
+| `/api/ai/describe` | POST | Generate agent description via Gemini AI |
+| `/api/purchase` | POST | Purchase agent with ETH payment |
+| `/api/onramp/session` | POST | Create Coinbase Onramp session |
 | `/api/admin/publishers/[id]/verify` | POST | Toggle publisher verification (admin only) |
 
 ---
@@ -277,19 +280,21 @@ VITE_API_URL=https://api-inky-seven.vercel.app
 ### High Priority
 | Task | Description |
 |------|-------------|
-| **x402 Facilitator** | Smart contract + API to execute permits and split payments |
+| **x402 Facilitator** | Smart contract + API to execute ERC-2612 permits and split USDC payments (80/20). Only blocker for gasless payments. |
 
 ### Medium Priority
 | Task | Description |
 |------|-------------|
-| **Hosted Execution** | Serverless runtime for publisher tools (no self-hosting required) |
-| E2E Tests | Automated testing with testnet USDC |
+| **E2E Tests** | Integration tests for payment flows, agent installation, publisher submission |
+| **Dashboard Analytics** | Earnings charts, sales history, payout tracking (depends on facilitator) |
+| **Agent Edit** | Edit MCP endpoints, tools, and metadata from the publisher dashboard |
 
 ### Low Priority
 | Task | Description |
 |------|-------------|
-| Subscription Billing | Recurring USDC payments |
-| Usage-Based Billing | Per-call metering |
+| **Hosted Execution** | Serverless runtime for publisher tools (no self-hosting required) |
+| Subscription Billing | Recurring USDC payments (schema ready) |
+| Usage-Based Billing | Per-call metering (schema ready) |
 
 ---
 
