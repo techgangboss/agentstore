@@ -6,17 +6,15 @@ import { z } from 'zod';
 export const dynamic = 'force-dynamic';
 
 const RegisterPublisherSchema = z.object({
-  publisher_id: z
+  name: z
     .string()
-    .min(3)
+    .min(2)
     .max(50)
-    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Must be lowercase alphanumeric with hyphens'),
+    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/, 'Must be lowercase alphanumeric with hyphens, used as unique identifier'),
   display_name: z.string().min(1).max(100),
   payout_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Must be valid Ethereum address'),
+  email: z.string().email().optional(),
   support_url: z.string().url().optional(),
-  // Wallet signature to prove ownership of payout address
-  signature: z.string().regex(/^0x[a-fA-F0-9]+$/),
-  message: z.string(),
 });
 
 // GET /api/publishers - List publishers (public)
@@ -73,44 +71,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { publisher_id, display_name, payout_address, support_url, signature, message } =
-    parsed.data;
+  const { name, display_name, payout_address, email, support_url } = parsed.data;
 
-  // Verify the signature proves ownership of the payout address
-  // The message should be: "Register as AgentStore publisher: {publisher_id}"
-  const expectedMessage = `Register as AgentStore publisher: ${publisher_id}`;
-  if (message !== expectedMessage) {
-    return NextResponse.json(
-      { error: `Invalid message. Expected: "${expectedMessage}"` },
-      { status: 400 }
-    );
-  }
-
-  // Verify signature using viem
-  const { verifyMessage } = await import('viem');
-  let recoveredAddress: string;
-  try {
-    const isValid = await verifyMessage({
-      address: payout_address as `0x${string}`,
-      message: message,
-      signature: signature as `0x${string}`,
-    });
-
-    if (!isValid) {
-      return NextResponse.json(
-        { error: 'Invalid signature - does not match payout address' },
-        { status: 401 }
-      );
-    }
-    recoveredAddress = payout_address;
-  } catch (error) {
-    console.error('Signature verification error:', error);
-    return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
-  }
+  // Use name as the unique publisher_id
+  const publisher_id = name;
 
   const adminSupabase = createAdminClient();
 
-  // Check if publisher_id already exists
+  // Check if publisher name already exists
   const { data: existing } = await adminSupabase
     .from('publishers')
     .select('id')
@@ -119,21 +87,7 @@ export async function POST(request: NextRequest) {
 
   if (existing) {
     return NextResponse.json(
-      { error: 'Publisher ID already taken' },
-      { status: 409 }
-    );
-  }
-
-  // Check if payout address is already registered
-  const { data: existingAddress } = await adminSupabase
-    .from('publishers')
-    .select('publisher_id')
-    .eq('payout_address', payout_address.toLowerCase())
-    .single();
-
-  if (existingAddress) {
-    return NextResponse.json(
-      { error: `This address is already registered as publisher: ${existingAddress.publisher_id}` },
+      { error: 'Publisher name already taken' },
       { status: 409 }
     );
   }
@@ -145,9 +99,10 @@ export async function POST(request: NextRequest) {
       publisher_id,
       display_name,
       payout_address: payout_address.toLowerCase(),
+      email: email || null,
       support_url: support_url || null,
     })
-    .select('publisher_id, display_name, support_url, created_at')
+    .select('publisher_id, display_name, email, support_url, created_at')
     .single();
 
   if (createError) {

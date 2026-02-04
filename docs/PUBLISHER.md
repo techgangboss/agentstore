@@ -13,8 +13,8 @@ node packages/cli/dist/index.js wallet setup
 
 # 3. Register as a publisher
 node packages/cli/dist/index.js publisher register \
-  -i your-publisher-id \
-  -n "Your Display Name"
+  -n your-name \
+  -d "Your Display Name"
 
 # 4. Create an agent manifest
 node packages/cli/dist/index.js publisher init -o my-agent.json

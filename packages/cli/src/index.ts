@@ -1507,10 +1507,11 @@ const publisherCmd = program
 publisherCmd
   .command('register')
   .description('Register as a publisher on AgentStore')
-  .requiredOption('-i, --id <publisher_id>', 'Publisher ID (lowercase, alphanumeric with hyphens)')
-  .requiredOption('-n, --name <display_name>', 'Display name for your publisher account')
+  .requiredOption('-n, --name <name>', 'Publisher name (lowercase, alphanumeric with hyphens, used as unique ID)')
+  .requiredOption('-d, --display-name <display_name>', 'Display name for your publisher account')
+  .option('-e, --email <email>', 'Contact email (optional)')
   .option('-u, --support-url <url>', 'Support URL for your agents')
-  .action(async (options: { id: string; name: string; supportUrl?: string }) => {
+  .action(async (options: { name: string; displayName: string; email?: string; supportUrl?: string }) => {
     try {
       if (!walletExists()) {
         console.log('No wallet configured. Run: agentstore wallet setup');
@@ -1523,48 +1524,37 @@ publisherCmd
         process.exit(1);
       }
 
-      const privateKey = await loadPrivateKey();
-      if (!privateKey) {
-        console.log('Failed to load wallet private key');
-        process.exit(1);
-      }
-
-      // Validate publisher_id format
-      if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(options.id) || options.id.length < 3) {
-        console.log('Invalid publisher ID. Must be:');
-        console.log('  - At least 3 characters');
+      // Validate name format
+      if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/.test(options.name) || options.name.length < 2) {
+        console.log('Invalid publisher name. Must be:');
+        console.log('  - At least 2 characters');
         console.log('  - Lowercase letters, numbers, and hyphens only');
         console.log('  - Start and end with a letter or number');
         process.exit(1);
       }
 
       console.log('\n📝 Registering as publisher...');
-      console.log(`   Publisher ID: ${options.id}`);
-      console.log(`   Display Name: ${options.name}`);
+      console.log(`   Name: ${options.name}`);
+      console.log(`   Display Name: ${options.displayName}`);
       console.log(`   Payout Address: ${config.address}`);
+      if (options.email) {
+        console.log(`   Email: ${options.email}`);
+      }
       if (options.supportUrl) {
         console.log(`   Support URL: ${options.supportUrl}`);
       }
 
-      // Create and sign the registration message
-      const message = `Register as AgentStore publisher: ${options.id}`;
-      const account = privateKeyToAccount(privateKey);
-
-      console.log('\n🔐 Signing registration message...');
-      const signature = await account.signMessage({ message });
-
       // Submit registration
-      console.log('📤 Submitting registration...');
+      console.log('\n📤 Submitting registration...');
       const response = await fetch(`${API_BASE}/api/publishers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          publisher_id: options.id,
-          display_name: options.name,
+          name: options.name,
+          display_name: options.displayName,
           payout_address: config.address,
+          email: options.email || undefined,
           support_url: options.supportUrl || undefined,
-          signature,
-          message,
         }),
       });
 
@@ -1576,10 +1566,10 @@ publisherCmd
       }
 
       console.log('\n✅ Publisher registered successfully!');
-      console.log(`\n   Your publisher ID: ${result.publisher?.publisher_id || options.id}`);
+      console.log(`\n   Your publisher name: ${result.publisher?.publisher_id || options.name}`);
       console.log('\n   Next steps:');
-      console.log('   1. Create an agent manifest (see docs)');
-      console.log(`   2. Submit your agent: agentstore publisher submit <manifest.json>`);
+      console.log('   1. Create an agent manifest: agentstore publisher init');
+      console.log('   2. Submit your agent: agentstore publisher submit <manifest.json>');
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : error}`);
       process.exit(1);
@@ -1744,7 +1734,7 @@ publisherCmd
   .option('-o, --output <file>', 'Output file path', 'agent-manifest.json')
   .action((options: { output: string }) => {
     const sampleManifest = {
-      agent_id: 'your-publisher-id.your-agent-name',
+      agent_id: 'your-publisher-name.your-agent-name',
       name: 'Your Agent Name',
       type: 'open',
       description: 'A brief description of what your agent does (10-1000 characters)',
@@ -1799,9 +1789,8 @@ publisherCmd
     console.log(`\n✅ Sample manifest created: ${outputPath}`);
     console.log('\nNext steps:');
     console.log('1. Edit the manifest with your agent details');
-    console.log('2. Update agent_id to: your-publisher-id.agent-name');
-    console.log('3. Set up your MCP endpoint');
-    console.log('4. Submit with: agentstore publisher submit ' + options.output);
+    console.log('2. Update agent_id to: your-publisher-name.agent-name');
+    console.log('3. Submit with: agentstore publisher submit ' + options.output);
   });
 
 program.parse();
