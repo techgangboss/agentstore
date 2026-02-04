@@ -100,6 +100,10 @@ export async function GET(request: NextRequest) {
       total: agents.length,
       limit,
       offset,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
     });
   } catch (err) {
     console.error('API error:', err);
