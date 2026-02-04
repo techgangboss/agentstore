@@ -36,3 +36,4 @@ coverage/
 # Local wallet (never commit!)
 .wallet/
 *.keystore
+.vercel

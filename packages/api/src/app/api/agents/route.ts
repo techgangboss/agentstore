@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       .from('agents')
       .select(`
         *,
-        publisher:publishers(publisher_id, display_name),
+        publisher:publishers(publisher_id, display_name, is_verified),
         agent_tags(tag:tags(name, slug))
       `)
       .eq('is_published', true)
@@ -85,11 +85,13 @@ export async function GET(request: NextRequest) {
       publisher: agent.publisher ? {
         publisher_id: agent.publisher.publisher_id,
         display_name: agent.publisher.display_name,
+        is_verified: agent.publisher.is_verified || false,
       } : null,
       pricing: agent.manifest?.pricing || { model: 'free' },
       tags: agent.agent_tags?.map((at: { tag: { name: string } }) => at.tag?.name).filter(Boolean) || [],
       download_count: agent.download_count,
       is_featured: agent.is_featured,
+      is_verified: agent.publisher?.is_verified || false,
       updated_at: agent.updated_at,
     }));
 
