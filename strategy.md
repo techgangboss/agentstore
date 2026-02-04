@@ -23,7 +23,7 @@ AgentStore is the first Claude Code marketplace with built-in payments. While se
 | If 500 active buyers, purchases per buyer | 4 |
 | If 200 active buyers, purchases per buyer | 10 |
 
-**Target timeline: 90 days from launch of facilitator contract.**
+**Target timeline: 90 days from today.** The x402 facilitator contract is live — paid transactions are ready to go.
 
 ---
 
@@ -164,20 +164,20 @@ Free agents are the gateway drug:
 
 ### 3.1 Reduce Purchase Friction
 
-The x402 facilitator contract is the critical path. Without it, no paid transactions happen.
+The x402 facilitator contract is live. Focus on optimizing the end-to-end flow:
 
 Priority actions:
-1. Deploy facilitator contract to Ethereum mainnet
-2. Test full payment flow end-to-end
-3. Add Coinbase Onramp for users who don't have USDC
-4. Ensure wallet setup is <30 seconds
+1. Test full payment flow end-to-end across different wallet states
+2. Add Coinbase Onramp for users who don't have USDC
+3. Ensure wallet setup is <30 seconds
+4. Optimize permit signing UX (clear confirmation dialog, amount/recipient visible)
 
 ### 3.2 Build Trust
 
 - **Ratings & reviews** — Let buyers rate agents (adds social proof)
-- **Refund policy** — 24-hour refund window builds confidence for first purchase
+- **No refunds policy** — All sales are final since buyers get immediate access to agent content. Clear policy displayed before purchase.
 - **Verified publisher badges** — Already implemented, use strategically
-- **Agent previews** — Let users see agent capabilities before purchasing (screenshots, demo output)
+- **Agent previews** — Let users see agent capabilities before purchasing (screenshots, demo output, detailed descriptions)
 
 ### 3.3 Publisher Retention
 
@@ -223,7 +223,7 @@ After initial traction, actively recruit for underserved categories:
 | 2 | 5 publishers signed up | Publisher count |
 | 4 | 10 agents listed (3+ paid) | Agent count |
 | 4 | 50 free agent installs | Install count |
-| 6 | Facilitator deployed, first paid transaction | Revenue |
+| 4 | First paid transaction | Revenue |
 | 6 | HN/Reddit launch post | Traffic spike |
 | 8 | 200 total installs, 20 paid purchases | $500 revenue |
 | 10 | 500 total installs, 100 paid purchases | $2,500 revenue |
@@ -235,7 +235,6 @@ After initial traction, actively recruit for underserved categories:
 
 | Risk | Mitigation |
 |------|-----------|
-| Facilitator contract delayed | Offer "waitlist" for paid agents, collect emails for launch notification |
 | Not enough quality publishers | Build seed agents ourselves, lower barrier with simple agent format |
 | Low conversion to paid | Ensure free agents are genuinely useful, price paid agents competitively |
 | Anthropic builds native marketplace | Move fast, establish publisher relationships, differentiate on payments |
@@ -259,13 +258,13 @@ After initial traction, actively recruit for underserved categories:
 
 ## Key Success Factors
 
-1. **The facilitator contract must ship.** Everything depends on enabling paid transactions. This is the single blocker.
+1. **Quality over quantity.** 10 excellent agents beat 100 mediocre ones. Each paid agent should save users measurable time or money.
 
-2. **Quality over quantity.** 10 excellent agents beat 100 mediocre ones. Each paid agent should save users measurable time or money.
+2. **Publisher experience matters.** If publishing is painful, good developers won't bother. The web form submission flow must stay frictionless.
 
-3. **Publisher experience matters.** If publishing is painful, good developers won't bother. The web form submission flow must stay frictionless.
+3. **First purchase is the hardest.** Once a user has a wallet set up and has made one purchase, subsequent purchases are near-zero friction. Focus on reducing barriers to the first transaction.
 
-4. **First purchase is the hardest.** Once a user has a wallet set up and has made one purchase, subsequent purchases are near-zero friction. Focus on reducing barriers to the first transaction.
+4. **No refunds, so quality matters even more.** All sales are final since buyers get immediate agent access. Agent descriptions and previews must accurately represent what the buyer gets. Bad agents with no recourse will kill trust fast.
 
 5. **Build in public.** The developer community rewards transparency. Share progress, metrics, challenges openly on Twitter/X and in relevant communities.
 
@@ -273,9 +272,9 @@ After initial traction, actively recruit for underserved categories:
 
 ## Immediate Next Actions
 
-1. Deploy x402 facilitator contract (critical path)
-2. Build 3 seed agents (security scanner, PR reviewer, cost analyzer)
-3. Create publisher outreach list (20 targets from MCP ecosystem)
-4. Write "How to build and sell a Claude Code agent" tutorial
-5. Set up analytics for funnel tracking (website → CLI → install → purchase)
-6. Prepare HN launch post for when 10+ quality agents are listed
+1. Build 3 seed agents (security scanner, PR reviewer, cost analyzer)
+2. Create publisher outreach list (20 targets from MCP ecosystem)
+3. Write "How to build and sell a Claude Code agent" tutorial
+4. Set up analytics for funnel tracking (website → CLI → install → purchase)
+5. Prepare HN launch post for when 10+ quality agents are listed
+6. Test end-to-end paid purchase flow with facilitator
