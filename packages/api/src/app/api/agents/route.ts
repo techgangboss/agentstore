@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       .from('agents')
       .select(`
         *,
-        publisher:publishers(publisher_id, display_name, is_verified),
+        publisher:publishers(*),
         agent_tags(tag:tags(name, slug))
       `)
       .eq('is_published', true)
