@@ -239,7 +239,6 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 | Task | Description |
 |------|-------------|
 | **x402 Facilitator** | Smart contract + API to execute permits and split payments |
-| **Landing Page** | agentstore.dev with "Add to Claude Code" button |
 
 ### Medium Priority
 | Task | Description |
@@ -315,6 +314,7 @@ node packages/cli/dist/index.js gateway-setup
 
 ## Deployment
 
+- **Website**: https://agentstore.tools
 - **API**: Vercel (`https://api.agentstore.dev`)
 - **Database**: Supabase (PostgreSQL with RLS)
 - **Facilitator**: Pending deployment on Ethereum mainnet
