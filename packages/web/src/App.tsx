@@ -1,34 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Hero } from './components/Hero';
-import { About } from './components/About';
-import { Installation } from './components/Installation';
-import { Marketplace } from './components/Marketplace';
-import { Builders } from './components/Builders';
-import { Docs } from './components/Docs';
-import { Footer } from './components/Footer';
+import React from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
+import { Home } from './pages/Home';
+import { SubmitAgent } from './pages/SubmitAgent';
+import { Dashboard } from './pages/Dashboard';
+import { AuthCallback } from './pages/AuthCallback';
 
 export default function App() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-100 font-sans selection:bg-teal-500/30">
-      <Navbar />
-      <Hero />
-      <div id="about">
-        <About />
-      </div>
-      <div id="installation">
-        <Installation />
-      </div>
-      <div id="marketplace">
-        <Marketplace />
-      </div>
-      <div id="builders">
-        <Builders />
-      </div>
-      <div id="docs">
-        <Docs />
-      </div>
-      <Footer />
+      <Routes>
+        <Route path="/" element={<><Navbar /><Home /></>} />
+        <Route path="/submit" element={<SubmitAgent />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+      </Routes>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Rocket, DollarSign, Wallet, ArrowRight } from 'lucide-react';
 
@@ -31,7 +32,7 @@ export function Builders() {
           <h2 className="text-teal-400 font-semibold tracking-wide uppercase text-sm mb-3">Agent Builders</h2>
           <h3 className="text-3xl sm:text-4xl font-bold text-white mb-6">Become a publisher to monetize your expertise</h3>
           <p className="text-lg text-gray-400">
-            Create agents, set your price in USD, and earn USDC directly to your wallet. 
+            Create agents, set your price in USD, and earn USDC directly to your wallet.
             No approval process—publish instantly and start earning.
           </p>
         </div>
@@ -56,15 +57,13 @@ export function Builders() {
         </div>
 
         <div className="mt-16 text-center">
-          <a
-            href="https://github.com/techgangboss/agentstore/blob/main/docs/PUBLISHER.md"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to="/submit"
             className="inline-flex items-center px-8 py-4 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors"
           >
             Submit Agent
             <ArrowRight className="ml-2 w-5 h-5" />
-          </a>
+          </Link>
         </div>
       </div>
     </section>

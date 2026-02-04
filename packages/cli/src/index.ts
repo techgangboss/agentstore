@@ -731,7 +731,13 @@ function createSkillFile(agent: ApiAgent): void {
     r.tools.map((t) => `- \`${agent.agent_id}:${t.name}\` - ${t.description}`)
   );
 
-  const content = `---
+  const hasTools = tools.length > 0;
+  const agentWrapper = (agent.install as any).agent_wrapper;
+
+  let content: string;
+
+  if (hasTools) {
+    content = `---
 description: ${agent.description}
 ---
 
@@ -753,6 +759,26 @@ These tools are available via the AgentStore gateway. Simply ask Claude to use t
 
 Example: "Use ${agent.agent_id}:${agent.install.gateway_routes[0]?.tools[0]?.name || 'tool_name'} to..."
 `;
+  } else {
+    // Simple agent without MCP tools - use agent_wrapper content or description
+    const wrapperContent = agentWrapper?.content || agent.description;
+    content = `---
+description: ${agent.description}
+---
+
+# ${agent.name}
+
+**Publisher:** ${agent.publisher.display_name}
+**Version:** ${agent.version}
+**Type:** ${agent.type === 'open' ? 'Free' : 'Paid'}
+
+${wrapperContent}
+
+## Usage
+
+This is a prompt-based agent. Reference it by asking Claude to follow the instructions from "${agent.name}".
+`;
+  }
 
   const skillFile = path.join(SKILLS_DIR, `${agent.agent_id.replace(/\./g, '-')}.md`);
   fs.writeFileSync(skillFile, content);
@@ -964,11 +990,16 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
 
   console.log('\n✅ Installation complete!');
   console.log(`\n   Agent: ${agent.agent_id}`);
-  console.log(`   Tools: ${toolCount} available`);
-  console.log('\n   To use, ask Claude to call the tools, e.g.:');
-  const firstTool = agent.install.gateway_routes[0]?.tools[0];
-  if (firstTool) {
-    console.log(`   "Use ${agent.agent_id}:${firstTool.name}"`);
+  if (toolCount > 0) {
+    console.log(`   Tools: ${toolCount} available`);
+    console.log('\n   To use, ask Claude to call the tools, e.g.:');
+    const firstTool = agent.install.gateway_routes[0]?.tools[0];
+    if (firstTool) {
+      console.log(`   "Use ${agent.agent_id}:${firstTool.name}"`);
+    }
+  } else {
+    console.log(`   Type: Prompt-based agent (no MCP tools)`);
+    console.log(`\n   To use, ask Claude to follow the "${agent.name}" instructions.`);
   }
 }
 

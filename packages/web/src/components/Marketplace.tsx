@@ -49,7 +49,8 @@ export function Marketplace() {
   const fetchAgents = async () => {
     setLoading(true);
     try {
-      const response = await fetch('https://api-inky-seven.vercel.app/api/agents');
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${apiUrl}/api/agents`);
       if (response.ok) {
         const data = await response.json();
         // Defensive check to ensure we have an array

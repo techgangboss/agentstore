@@ -10,8 +10,9 @@ An open-source marketplace for Claude Code plugins with gasless USDC payments.
 |----------|--------|-------|
 | Core Infrastructure | ✅ Complete | API, CLI, Gateway, Publisher Flow |
 | Payment Protocol | ✅ Complete | x402 types, 402 flow, permits, 20% platform fee |
-| Marketplace API | ✅ Live | `https://api.agentstore.dev` |
+| Marketplace API | ✅ Live | `https://api-inky-seven.vercel.app` |
 | Landing Page | ✅ Live | `https://agentstore.tools` |
+| Publisher Portal | ✅ Live | Submit agents, Google OAuth, dashboard |
 | npm Package | ✅ Published | `npm install -g @agentstore/cli` |
 | x402 Facilitator | ⏳ Pending | Contract needed for gasless payments |
 
@@ -21,10 +22,13 @@ An open-source marketplace for Claude Code plugins with gasless USDC payments.
 
 - **Gasless USDC Payments** — Users sign ERC-2612 permits, no ETH needed
 - **Instant Agent Installation** — Tools available immediately via MCP gateway
+- **Publisher Portal** — Submit agents via web form with Google OAuth
+- **Publisher Dashboard** — Track agents, sales, and earnings
 - **Publisher Monetization** — 80/20 revenue split (publisher/platform)
 - **Verified Publishers** — Admin-controlled verification badges for trusted publishers
 - **Wallet Integration** — Local encrypted wallet with Coinbase Onramp
 - **Free & Paid Agents** — Flexible pricing models
+- **Simple Agents** — Submit prompt-based agents without MCP endpoints
 
 ---
 
@@ -65,8 +69,42 @@ agentstore install publisher.paid-agent --pay
 6. API verifies payment and grants entitlement
 7. Agent installed with routes and skill files
 
-### Step 4: Use the Agent
+### Step 5: Use the Agent
 Tools available immediately in Claude Code via the gateway MCP server.
+
+---
+
+## For Publishers
+
+### Web Portal (Recommended)
+
+The easiest way to publish agents is through the web portal at [agentstore.tools/submit](https://agentstore.tools/submit):
+
+1. **Fill out the form** — Agent name, description, type, pricing, and tags
+2. **Sign in with Google** — Creates your publisher account automatically
+3. **Agent goes live** — Published immediately to the marketplace
+4. **Track on dashboard** — View agents, sales, and earnings at [agentstore.tools/dashboard](https://agentstore.tools/dashboard)
+
+**Simple agents** (no MCP endpoint required) work great for prompt-based agents. You can add MCP configuration later from the dashboard.
+
+**Paid agents** require selecting "Proprietary" type and setting a price ($5 minimum). You earn 80% of every sale.
+
+### CLI (Advanced)
+
+For programmatic submissions with full manifest control:
+
+```bash
+# 1. Generate manifest template
+agentstore publisher init
+
+# 2. Edit manifest with your agent details
+vim my-agent.json
+
+# 3. Submit to marketplace
+agentstore publisher submit my-agent.json
+```
+
+See the [Publisher Documentation](docs/PUBLISHER.md) for full manifest schema details.
 
 ---
 
@@ -94,24 +132,6 @@ Fee breakdown is included in every 402 response:
     }
   }
 }
-```
-
----
-
-## For Publishers
-
-Want to monetize your Claude Code agents? See the [Publisher Documentation](docs/PUBLISHER.md).
-
-Quick start:
-```bash
-# 1. Generate manifest template
-node packages/cli/dist/index.js publisher init
-
-# 2. Edit manifest with your agent details
-vim my-agent.json
-
-# 3. Submit to marketplace
-node packages/cli/dist/index.js publisher submit my-agent.json
 ```
 
 ---
@@ -175,17 +195,26 @@ AgentStore uses gasless USDC payments on Ethereum mainnet:
 │   Supabase      │         │  x402           │
 │   (Postgres)    │◀───────▶│  Facilitator    │
 └─────────────────┘         └─────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Publisher Portal (Web)                           │
+│  ┌─────────────┐    ┌─────────────────┐    ┌────────────────────┐  │
+│  │  Submit     │───▶│  Google OAuth   │───▶│   Dashboard        │  │
+│  │  Agent Form │    │  (Supabase Auth)│    │   (Metrics/Agents) │  │
+│  └─────────────┘    └─────────────────┘    └────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| `packages/api` | Next.js API on Vercel. Agent registry, 402 flow, payment verification. |
+| `packages/api` | Next.js API on Vercel. Agent registry, 402 flow, payment verification, publisher auth. |
 | `packages/cli` | CLI for browsing, installing, and managing agents. |
 | `packages/gateway` | Local MCP server routing tool calls to publishers. |
 | `packages/wallet` | Local Ethereum wallet with encryption. |
 | `packages/common` | Shared types including x402 payment protocol. |
+| `packages/web` | React landing page, publisher portal, and dashboard. |
 | `packages/plugin` | Claude Code plugin with slash commands. |
 
 ## Local Config Files
@@ -217,18 +246,28 @@ X402_FACILITATOR_ENDPOINT=https://...           # Submit permits
 X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 ```
 
+### Web (Vercel)
+```
+VITE_SUPABASE_URL=https://xxx.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_...
+VITE_API_URL=https://api-inky-seven.vercel.app
+```
+
 ---
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/agents` | GET | List all published agents (includes `is_verified` flag) |
-| `/api/agents/[id]` | GET | Get agent details |
+| `/api/agents` | GET | List all published agents (search, filter by tag/type) |
+| `/api/agents/[id]` | GET | Get agent details with full manifest |
 | `/api/agents/[id]/access` | GET | Check access, returns 402 if payment needed |
 | `/api/payments/submit` | POST | Submit signed permit for payment |
-| `/api/publishers/register` | POST | Register as publisher |
-| `/api/publishers/agents` | POST | Submit new agent |
+| `/api/auth/link-publisher` | POST | Create publisher account (Google OAuth) |
+| `/api/publishers/me` | GET/PATCH | Publisher profile and settings |
+| `/api/publishers/agents/simple` | POST | Submit agent via web form (Google auth) |
+| `/api/publishers` | POST | Register publisher (CLI, wallet signature) |
+| `/api/publishers/agents` | POST | Submit agent (CLI, wallet signature) |
 | `/api/admin/publishers/[id]/verify` | POST | Toggle publisher verification (admin only) |
 
 ---
@@ -244,8 +283,6 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 | Task | Description |
 |------|-------------|
 | **Hosted Execution** | Serverless runtime for publisher tools (no self-hosting required) |
-| Publisher Dashboard | Web UI for agent management and analytics |
-| npm Publish | `npm install -g @agentstore/cli` |
 | E2E Tests | Automated testing with testnet USDC |
 
 ### Low Priority
@@ -271,6 +308,11 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
     "currency": "USD"
   },
   "install": {
+    "agent_wrapper": {
+      "format": "markdown",
+      "entrypoint": "agent.md",
+      "content": "Agent instructions (for simple agents)"
+    },
     "gateway_routes": [
       {
         "route_id": "default",
@@ -288,6 +330,8 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
   }
 }
 ```
+
+`gateway_routes` is optional for simple prompt-based agents.
 
 ---
 
@@ -315,8 +359,9 @@ agentstore install techgangboss.wallet-assistant
 
 - **Website**: https://agentstore.tools
 - **CLI**: `npm install -g @agentstore/cli`
-- **API**: Vercel (`https://api.agentstore.dev`)
+- **API**: Vercel (`https://api-inky-seven.vercel.app`)
 - **Database**: Supabase (PostgreSQL with RLS)
+- **Auth**: Google OAuth via Supabase Auth
 - **Facilitator**: Pending deployment on Ethereum mainnet
 
 ## Security
@@ -326,6 +371,7 @@ agentstore install techgangboss.wallet-assistant
 - Row-level security on all database tables
 - Input validation via Zod schemas
 - HTTPS enforcement in production
+- Google OAuth with Supabase Auth for publisher accounts
 
 ---
 

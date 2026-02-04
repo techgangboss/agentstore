@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
       "dependencies": {
+          "@supabase/supabase-js": "^2.45.0",
+          "react-router-dom": "^6.26.0",
+          "zod": "^3.23.8",
           "@radix-ui/react-accordion": "^1.2.3",
           "@radix-ui/react-alert-dialog": "^1.1.6",
           "@radix-ui/react-aspect-ratio": "^1.1.2",

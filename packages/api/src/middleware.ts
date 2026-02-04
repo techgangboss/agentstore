@@ -90,6 +90,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Handle CORS preflight requests
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      },
+    });
+  }
+
   // Check request body size for POST/PUT requests
   if (request.method === 'POST' || request.method === 'PUT') {
     const contentLength = request.headers.get('content-length');
