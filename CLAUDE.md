@@ -20,6 +20,7 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 - [x] Facilitator-ready payment abstraction
 - [x] Publisher registration and agent submission
 - [x] 20% platform fee (80/20 split with publishers)
+- [x] Publisher verification system (admin-controlled badges)
 
 ### In Progress / Blocked
 - [ ] **x402 Facilitator Contract** - Executes USDC transfers from signed permits

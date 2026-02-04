@@ -22,6 +22,7 @@ An open-source marketplace for Claude Code plugins with gasless USDC payments.
 - **Gasless USDC Payments** — Users sign ERC-2612 permits, no ETH needed
 - **Instant Agent Installation** — Tools available immediately via MCP gateway
 - **Publisher Monetization** — 80/20 revenue split (publisher/platform)
+- **Verified Publishers** — Admin-controlled verification badges for trusted publishers
 - **Wallet Integration** — Local encrypted wallet with Coinbase Onramp
 - **Free & Paid Agents** — Flexible pricing models
 
@@ -222,12 +223,13 @@ X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/agents` | GET | List all published agents |
+| `/api/agents` | GET | List all published agents (includes `is_verified` flag) |
 | `/api/agents/[id]` | GET | Get agent details |
 | `/api/agents/[id]/access` | GET | Check access, returns 402 if payment needed |
 | `/api/payments/submit` | POST | Submit signed permit for payment |
 | `/api/publishers/register` | POST | Register as publisher |
 | `/api/publishers/agents` | POST | Submit new agent |
+| `/api/admin/publishers/[id]/verify` | POST | Toggle publisher verification (admin only) |
 
 ---
 
