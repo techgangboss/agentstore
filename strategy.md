@@ -247,7 +247,7 @@ After initial traction, actively recruit for underserved categories:
 
 | Item | Amount | Purpose |
 |------|--------|---------|
-| Facilitator contract audit | $500 | Smart contract security review |
+| Facilitator security audit | $500 | API and relay wallet security review |
 | Gas costs for facilitator | $200 | Transaction execution on mainnet |
 | Content creation | $300 | Articles, demos, video content |
 | Community engagement | $200 | Sponsoring relevant Discord/community events |

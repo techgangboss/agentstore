@@ -97,7 +97,6 @@ export async function GET(
         paymentProof,
         agent_id,
         walletAddress,
-        agent.publisher?.payout_address,
         pricing.amount
       );
 
@@ -151,8 +150,8 @@ export async function GET(
 }
 
 /**
- * Verify payment proof via facilitator
- * The facilitator handles the actual transaction and provides verification
+ * Verify payment proof from X-Payment header
+ * Uses the facilitator to verify that the on-chain settlement completed
  */
 async function verifyPaymentProof(
   supabase: ReturnType<typeof createAdminClient>,
@@ -163,7 +162,6 @@ async function verifyPaymentProof(
   },
   agentId: string,
   walletAddress: string,
-  _recipientAddress: string | null,
   expectedAmount: number
 ): Promise<{
   success: boolean;
@@ -171,12 +169,9 @@ async function verifyPaymentProof(
   expires_at?: string | null;
   error?: string;
 }> {
-  // Query facilitator verification endpoint if configured
-  const FACILITATOR_VERIFY_ENDPOINT = process.env.X402_FACILITATOR_VERIFY_ENDPOINT;
-
-  if (FACILITATOR_VERIFY_ENDPOINT && proof.facilitator_proof) {
+  if (FACILITATOR_ENDPOINT && proof.facilitator_proof) {
     try {
-      const verifyResponse = await fetch(FACILITATOR_VERIFY_ENDPOINT, {
+      const verifyResponse = await fetch(`${FACILITATOR_ENDPOINT}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -220,16 +215,7 @@ async function verifyPaymentProof(
       }
     } catch (e) {
       console.error('Facilitator verification error:', e);
-      // Fall through to pending state
     }
-  }
-
-  // No facilitator available - store intent as pending
-  if (proof.nonce) {
-    return {
-      success: false,
-      error: 'Payment intent received. Awaiting facilitator processing.',
-    };
   }
 
   return { success: false, error: 'No valid payment proof provided' };
