@@ -52,7 +52,7 @@ agentstore wallet fund
 agentstore install publisher.paid-agent --pay
 ```
 
-Payments use gasless ERC-2612 permits - you only need USDC, no ETH for gas.
+Payments use gasless EIP-3009 transferWithAuthorization — you only need USDC, no ETH for gas.
 
 ## Links
 

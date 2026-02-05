@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { X402PaymentProof } from '@/lib/x402';
 import { PLATFORM_WALLET, PLATFORM_FEE_PERCENT } from '@/lib/x402';
 
-// Facilitator endpoint - will process permits when deployed
+// x402 facilitator endpoints
 const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || null;
 
 const PaymentSubmissionSchema = z.object({
@@ -13,16 +13,17 @@ const PaymentSubmissionSchema = z.object({
   payment_required: z.object({
     amount: z.string(),
     currency: z.literal('USDC'),
-    recipient: z.string(),
+    payTo: z.string(),
     nonce: z.string(),
     expires_at: z.string(),
   }),
-  permit: z.object({
-    owner: z.string(),
-    spender: z.string(),
+  authorization: z.object({
+    from: z.string(),
+    to: z.string(),
     value: z.string(),
-    nonce: z.coerce.bigint(),
-    deadline: z.coerce.bigint(),
+    validAfter: z.string(),
+    validBefore: z.string(),
+    nonce: z.string(),
     v: z.number(),
     r: z.string(),
     s: z.string(),
@@ -32,16 +33,14 @@ const PaymentSubmissionSchema = z.object({
 /**
  * POST /api/payments/submit
  *
- * Submit a signed permit (payment intent) for processing.
+ * Submit a signed EIP-3009 transferWithAuthorization for processing.
  *
  * Flow:
- * 1. User signs ERC-2612 permit (gasless)
- * 2. Submit permit here
- * 3. If facilitator available: facilitator executes tx, returns proof
- * 4. If no facilitator: store intent for later processing
- *
- * The facilitator handles the actual on-chain transaction and verification.
- * User only submits intent (signed permit), minimizing risk.
+ * 1. User signs transferWithAuthorization (gasless EIP-712 typed data)
+ * 2. Submit signed authorization here
+ * 3. Server forwards to facilitator /verify then /settle
+ * 4. Facilitator's relay wallet submits authorization to USDC on-chain
+ * 5. USDC verifies signature and moves funds from user to payTo address
  */
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -59,7 +58,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { agent_id, wallet_address, payment_required, permit } = validation.data;
+  const { agent_id, wallet_address, payment_required, authorization } = validation.data;
 
   const supabase = createAdminClient();
 
@@ -92,7 +91,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Calculate fee split: 20% platform, 80% publisher
-  const publisherWallet = agent.publisher?.wallet_address || payment_required.recipient;
+  const publisherWallet = agent.publisher?.wallet_address || payment_required.payTo;
   const platformAmount = expectedAmount * (PLATFORM_FEE_PERCENT / 100);
   const publisherAmount = expectedAmount - platformAmount;
 
@@ -105,32 +104,52 @@ export async function POST(request: NextRequest) {
     publisher_percent: 100 - PLATFORM_FEE_PERCENT,
   };
 
-  // If facilitator is available, submit permit for processing
-  // Facilitator handles: execute permit, transfer USDC, return proof
+  // Forward signed authorization to facilitator for verification and settlement
   if (FACILITATOR_ENDPOINT) {
     try {
-      const facilitatorResponse = await fetch(FACILITATOR_ENDPOINT, {
+      // Step 1: Verify the authorization with the facilitator
+      const verifyResponse = await fetch(`${FACILITATOR_ENDPOINT}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          authorization,
           payment_required,
-          permit,
           payer: wallet_address,
           fee_split: feeSplit,
         }),
       });
 
-      if (!facilitatorResponse.ok) {
-        const errorText = await facilitatorResponse.text();
+      if (!verifyResponse.ok) {
+        const errorText = await verifyResponse.text();
         return NextResponse.json(
-          { error: 'Facilitator rejected payment', details: errorText },
+          { error: 'Facilitator rejected authorization', details: errorText },
           { status: 502 }
         );
       }
 
-      const proof: X402PaymentProof = await facilitatorResponse.json();
+      // Step 2: Settle — facilitator's relay wallet submits to USDC on-chain
+      const settleResponse = await fetch(`${FACILITATOR_ENDPOINT}/settle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          authorization,
+          payment_required,
+          payer: wallet_address,
+          fee_split: feeSplit,
+        }),
+      });
 
-      // Facilitator executed tx successfully - create entitlement
+      if (!settleResponse.ok) {
+        const errorText = await settleResponse.text();
+        return NextResponse.json(
+          { error: 'Settlement failed', details: errorText },
+          { status: 502 }
+        );
+      }
+
+      const proof: X402PaymentProof = await settleResponse.json();
+
+      // Settlement succeeded — create entitlement
       const entitlementToken = generateEntitlementToken();
       await supabase.from('entitlements').insert({
         agent_id,
@@ -153,46 +172,18 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       console.error('Facilitator error:', error);
-      // Fall through to pending storage
+      return NextResponse.json(
+        { error: 'Payment processing failed. Please try again.' },
+        { status: 502 }
+      );
     }
   }
 
-  // Facilitator not available - store payment intent for later
-  // Intent remains valid (permit doesn't expire quickly), low risk
-  try {
-    await supabase.from('pending_payments').insert({
-      agent_id,
-      wallet_address: wallet_address.toLowerCase(),
-      payment_required: payment_required,
-      permit_signature: {
-        owner: permit.owner,
-        spender: permit.spender,
-        value: permit.value,
-        nonce: permit.nonce.toString(),
-        deadline: permit.deadline.toString(),
-        v: permit.v,
-        r: permit.r,
-        s: permit.s,
-      },
-      fee_split: feeSplit,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      expires_at: payment_required.expires_at,
-    });
-  } catch (insertError) {
-    // Table might not exist yet - log but don't fail
-    console.error('Failed to store pending payment:', insertError);
-  }
-
-  return NextResponse.json({
-    success: true,
-    status: 'pending_facilitator',
-    message: 'Payment intent signed and stored. Will be processed when facilitator is available.',
-    nonce: payment_required.nonce,
-    agent_id,
-    amount: payment_required.amount,
-    currency: 'USDC',
-  });
+  // Facilitator not configured — reject payment
+  return NextResponse.json(
+    { error: 'Payment processing is not available. Facilitator not configured.' },
+    { status: 503 }
+  );
 }
 
 function generateEntitlementToken(): string {

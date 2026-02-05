@@ -154,7 +154,7 @@ describe('Type guards', () => {
   });
 
   it('isPaymentError only matches PaymentError', () => {
-    expect(isPaymentError(new PaymentError('test', 'INVALID_PERMIT'))).toBe(true);
+    expect(isPaymentError(new PaymentError('test', 'INVALID_AUTHORIZATION'))).toBe(true);
     expect(isPaymentError(new WalletError('test', 'WALLET_LOCKED'))).toBe(false);
   });
 

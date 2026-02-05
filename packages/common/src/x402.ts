@@ -1,5 +1,5 @@
 // @agentstore/common - x402 Payment Protocol Types
-// Facilitator-ready payment abstraction for gasless USDC payments
+// Gasless USDC payments via EIP-3009 transferWithAuthorization
 
 // USDC contract on Ethereum mainnet
 export const USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as const;
@@ -16,7 +16,7 @@ export interface X402PaymentRequired {
   // Payment details
   amount: string; // Amount in USDC (human readable, e.g., "5.00")
   currency: 'USDC';
-  recipient: string; // Publisher's payout address
+  payTo: string; // Address to receive the payment
 
   // Resource being purchased
   resource: {
@@ -25,8 +25,20 @@ export interface X402PaymentRequired {
     description: string;
   };
 
-  // Payment methods accepted
-  accepts: X402PaymentMethod[];
+  // x402 payment configuration
+  x402: {
+    version: '1';
+    chain_id: number;
+    token: string; // USDC address
+    facilitator: string; // Facilitator API base URL
+    // EIP-712 domain for signing transferWithAuthorization
+    domain: {
+      name: string; // "USD Coin"
+      version: string; // "2"
+      chainId: number;
+      verifyingContract: string; // USDC address
+    };
+  };
 
   // Nonce to prevent replay
   nonce: string;
@@ -36,63 +48,39 @@ export interface X402PaymentRequired {
 }
 
 /**
- * Payment methods the gateway accepts
- */
-export type X402PaymentMethod =
-  | X402FacilitatorMethod
-  | X402DirectTransferMethod;
-
-export interface X402FacilitatorMethod {
-  type: 'facilitator';
-  endpoint: string; // URL to submit permit to
-  chain_id: number;
-  token: string; // USDC address
-  // EIP-2612 permit parameters
-  permit: {
-    name: string; // "USD Coin"
-    version: string; // "2"
-    verifyingContract: string; // USDC address
-  };
-}
-
-export interface X402DirectTransferMethod {
-  type: 'direct_transfer';
-  chain_id: number;
-  token: string; // USDC address
-  // For direct transfer, user pays gas
-}
-
-/**
- * EIP-2612 Permit signature
+ * EIP-3009 TransferWithAuthorization signature
  * User signs this off-chain (no gas needed)
+ * The relay wallet submits it on-chain, paying gas
  */
-export interface PermitSignature {
-  owner: string;
-  spender: string; // Facilitator contract
-  value: string; // Amount in wei (USDC has 6 decimals)
-  nonce: bigint;
-  deadline: bigint;
+export interface TransferAuthorization {
+  from: string; // Payer's address
+  to: string; // Recipient's address (payTo)
+  value: string; // Amount in smallest unit (USDC has 6 decimals)
+  validAfter: string; // Unix timestamp (typically "0")
+  validBefore: string; // Unix timestamp (expiry)
+  nonce: string; // Random bytes32 nonce
   v: number;
   r: string;
   s: string;
 }
 
 /**
- * Payment request submitted to facilitator
+ * Payment submission sent to our API
+ * Contains the signed authorization for the facilitator to relay
  */
 export interface X402PaymentRequest {
   // The 402 response we're fulfilling
   payment_required: X402PaymentRequired;
 
-  // Permit signature for gasless approval
-  permit: PermitSignature;
+  // EIP-3009 signed authorization
+  authorization: TransferAuthorization;
 
   // User's wallet address
   payer: string;
 }
 
 /**
- * Proof returned by facilitator after payment
+ * Proof returned by facilitator after settling payment
  */
 export interface X402PaymentProof {
   // Transaction details
@@ -105,8 +93,7 @@ export interface X402PaymentProof {
   from: string;
   to: string;
 
-  // Facilitator signature proving payment was made
-  // Gateway can verify this without hitting the chain
+  // Facilitator attestation
   facilitator_signature?: string;
 
   // Status
@@ -149,14 +136,14 @@ export interface PaymentProvider {
   pay(
     paymentRequired: X402PaymentRequired,
     signerAddress: string,
-    signPermit: (permit: PermitMessage) => Promise<PermitSignature>
+    signAuthorization: (message: TransferAuthorizationMessage) => Promise<TransferAuthorization>
   ): Promise<X402PaymentProof>;
 }
 
 /**
- * EIP-712 typed data for permit signing
+ * EIP-712 typed data for TransferWithAuthorization signing
  */
-export interface PermitMessage {
+export interface TransferAuthorizationMessage {
   domain: {
     name: string;
     version: string;
@@ -164,15 +151,16 @@ export interface PermitMessage {
     verifyingContract: string;
   };
   types: {
-    Permit: Array<{ name: string; type: string }>;
+    TransferWithAuthorization: Array<{ name: string; type: string }>;
   };
-  primaryType: 'Permit';
+  primaryType: 'TransferWithAuthorization';
   message: {
-    owner: string;
-    spender: string;
+    from: string;
+    to: string;
     value: string;
-    nonce: bigint;
-    deadline: bigint;
+    validAfter: string;
+    validBefore: string;
+    nonce: string;
   };
 }
 
@@ -214,7 +202,7 @@ export function formatUSDC(amount: bigint): string {
 }
 
 /**
- * Generate a random nonce
+ * Generate a random nonce (hex string)
  */
 export function generateNonce(): string {
   const bytes = new Uint8Array(16);
@@ -223,49 +211,45 @@ export function generateNonce(): string {
 }
 
 /**
+ * Generate a random bytes32 nonce for EIP-3009
+ */
+export function generateAuthorizationNonce(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Create 402 Payment Required response
  */
 export function createPaymentRequired(params: {
   amount: number;
-  recipient: string;
+  payTo: string;
   agentId: string;
   agentName: string;
-  facilitatorEndpoint?: string;
+  facilitatorEndpoint: string;
 }): X402PaymentRequired {
-  const accepts: X402PaymentMethod[] = [];
-
-  // Add facilitator method if endpoint provided
-  if (params.facilitatorEndpoint) {
-    accepts.push({
-      type: 'facilitator',
-      endpoint: params.facilitatorEndpoint,
-      chain_id: CHAIN_ID,
-      token: USDC_ADDRESS,
-      permit: {
-        name: 'USD Coin',
-        version: '2',
-        verifyingContract: USDC_ADDRESS,
-      },
-    });
-  }
-
-  // Always allow direct transfer as fallback
-  accepts.push({
-    type: 'direct_transfer',
-    chain_id: CHAIN_ID,
-    token: USDC_ADDRESS,
-  });
-
   return {
     amount: params.amount.toFixed(2),
     currency: 'USDC',
-    recipient: params.recipient,
+    payTo: params.payTo,
     resource: {
       type: 'agent',
       agent_id: params.agentId,
       description: params.agentName,
     },
-    accepts,
+    x402: {
+      version: '1',
+      chain_id: CHAIN_ID,
+      token: USDC_ADDRESS,
+      facilitator: params.facilitatorEndpoint,
+      domain: {
+        name: 'USD Coin',
+        version: '2',
+        chainId: CHAIN_ID,
+        verifyingContract: USDC_ADDRESS,
+      },
+    },
     nonce: generateNonce(),
     expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 min
   };

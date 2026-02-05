@@ -9,18 +9,18 @@ An open-source marketplace for Claude Code plugins with gasless USDC payments.
 | Category | Status | Notes |
 |----------|--------|-------|
 | Core Infrastructure | ✅ Complete | API, CLI, Gateway, Publisher Flow |
-| Payment Protocol | ✅ Complete | x402 types, 402 flow, permits, 20% platform fee |
+| Payment Protocol | ✅ Complete | x402 types, 402 flow, EIP-3009 authorizations, 20% platform fee |
 | Marketplace API | ✅ Live | `https://api-inky-seven.vercel.app` |
 | Landing Page | ✅ Live | `https://agentstore.tools` |
 | Publisher Portal | ✅ Live | Submit agents, Google OAuth, dashboard |
 | npm Package | ✅ Published | `npm install -g @agentstore/cli` |
-| x402 Facilitator | ⏳ Pending | Contract needed for gasless payments |
+| x402 Facilitator | ✅ Ready | Relay API for gasless USDC payments |
 
 ---
 
 ## Features
 
-- **Gasless USDC Payments** — Users sign ERC-2612 permits, no ETH needed
+- **Gasless USDC Payments** — Users sign EIP-3009 authorizations, no ETH needed
 - **Instant Agent Installation** — Tools available immediately via MCP gateway
 - **Publisher Portal** — Submit agents via web form with Google OAuth
 - **Publisher Dashboard** — Track agents, sales, and earnings
@@ -61,13 +61,13 @@ agentstore install publisher.paid-agent --pay
 ```
 
 **Paid Agent Flow:**
-1. API returns `402 Payment Required` with USDC amount
-2. CLI creates wallet (if needed) and prompts for permit signature
-3. User signs ERC-2612 permit (gasless, no ETH needed)
-4. Permit submitted to facilitator for execution
-5. Facilitator transfers USDC (80% publisher, 20% platform)
-6. API verifies payment and grants entitlement
-7. Agent installed with routes and skill files
+1. API returns `402 Payment Required` with USDC amount and payTo address
+2. CLI creates wallet (if needed) and prompts for signature
+3. User signs EIP-3009 `transferWithAuthorization` (gasless, no ETH needed)
+4. Signed authorization submitted to server, forwarded to facilitator
+5. Facilitator's relay wallet submits authorization to USDC on-chain
+6. USDC verifies signature and moves funds directly from user to payTo address
+7. API grants entitlement, agent installed with routes and skill files
 
 ### Step 5: Use the Agent
 Tools available immediately in Claude Code via the gateway MCP server.
@@ -138,37 +138,38 @@ Fee breakdown is included in every 402 response:
 
 ## x402 Payment Protocol
 
-AgentStore uses gasless USDC payments on Ethereum mainnet:
+AgentStore uses the x402 standard for gasless USDC payments on Ethereum mainnet via EIP-3009 `transferWithAuthorization`:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Gasless Payment Flow                          │
+│                    Gasless Payment Flow (x402)                    │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. User requests paid agent                                    │
 │                    ↓                                            │
-│  2. API returns 402 with: amount, recipient, fee_split, nonce   │
+│  2. API returns 402 with: amount, payTo, x402 config, nonce     │
 │                    ↓                                            │
-│  3. User signs ERC-2612 permit (gasless signature)              │
+│  3. User signs transferWithAuthorization (EIP-3009 typed data)  │
+│     — authorizes exact transfer, no ETH needed                  │
 │                    ↓                                            │
-│  4. Permit sent to x402 Facilitator                             │
+│  4. Signed authorization sent to server                         │
 │                    ↓                                            │
-│  5. Facilitator executes:                                       │
-│     - permit(user, facilitator, amount)                         │
-│     - transferFrom(user, platform, 20%)                         │
-│     - transferFrom(user, publisher, 80%)                        │
+│  5. Server forwards to facilitator /verify then /settle         │
 │                    ↓                                            │
-│  6. Facilitator returns proof to API                            │
+│  6. Facilitator's relay wallet submits authorization to USDC    │
+│     on-chain, paying gas                                        │
 │                    ↓                                            │
-│  7. API grants entitlement, user gets agent                     │
+│  7. USDC verifies signature, moves funds from user to payTo    │
+│                    ↓                                            │
+│  8. API grants entitlement, user gets agent                     │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Why gasless?**
 - Users only need USDC, no ETH for gas
-- Single signature UX (no approve + transfer)
-- Facilitator pays gas, recoups from platform fee
+- Single signature UX — sign one EIP-712 typed data message
+- Relay wallet pays gas, recoups from platform fee
 
 ---
 
@@ -225,7 +226,7 @@ AgentStore uses gasless USDC payments on Ethereum mainnet:
 ├── entitlements.json  # Access tokens for paid agents
 ├── wallet.json        # Wallet address and config
 ├── wallet.keystore    # Encrypted private key
-└── pending_payments/  # Permits awaiting facilitator
+└── pending_payments/  # Authorizations awaiting settlement
 
 ~/.claude/
 ├── mcp.json           # Gateway MCP registration
@@ -241,9 +242,8 @@ SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_KEY=eyJ...
 CDP_CLIENT_KEY=xxx                              # Coinbase Onramp
 
-# x402 Facilitator (when deployed)
-X402_FACILITATOR_ENDPOINT=https://...           # Submit permits
-X402_FACILITATOR_VERIFY_ENDPOINT=https://...    # Verify payments
+# x402 Facilitator (relay API for gasless payments)
+X402_FACILITATOR_ENDPOINT=https://...           # /verify and /settle endpoints
 ```
 
 ### Web (Vercel)
@@ -262,7 +262,7 @@ VITE_API_URL=https://api-inky-seven.vercel.app
 | `/api/agents` | GET | List all published agents (search, filter by tag/type) |
 | `/api/agents/[id]` | GET | Get agent details with full manifest |
 | `/api/agents/[id]/access` | GET | Check access, returns 402 if payment needed |
-| `/api/payments/submit` | POST | Submit signed permit for payment |
+| `/api/payments/submit` | POST | Submit signed EIP-3009 authorization for payment |
 | `/api/auth/link-publisher` | POST | Create publisher account (Google OAuth) |
 | `/api/publishers/me` | GET/PATCH | Publisher profile and settings |
 | `/api/publishers/agents/simple` | POST | Submit agent via web form (Google auth) |
@@ -277,16 +277,11 @@ VITE_API_URL=https://api-inky-seven.vercel.app
 
 ## Remaining Work
 
-### High Priority
-| Task | Description |
-|------|-------------|
-| **x402 Facilitator** | Smart contract + API to execute ERC-2612 permits and split USDC payments (80/20). Only blocker for gasless payments. |
-
 ### Medium Priority
 | Task | Description |
 |------|-------------|
 | **E2E Tests** | Integration tests for payment flows, agent installation, publisher submission |
-| **Dashboard Analytics** | Earnings charts, sales history, payout tracking (depends on facilitator) |
+| **Dashboard Analytics** | Earnings charts, sales history, payout tracking |
 | **Agent Edit** | Edit MCP endpoints, tools, and metadata from the publisher dashboard |
 
 ### Low Priority
@@ -367,12 +362,12 @@ agentstore install techgangboss.wallet-assistant
 - **API**: Vercel (`https://api-inky-seven.vercel.app`)
 - **Database**: Supabase (PostgreSQL with RLS)
 - **Auth**: Google OAuth via Supabase Auth
-- **Facilitator**: Pending deployment on Ethereum mainnet
+- **Facilitator**: x402 relay API for gasless USDC payments
 
 ## Security
 
 - AES-256-GCM wallet encryption with OS keychain
-- ERC-2612 permits (gasless, no private key exposure)
+- EIP-3009 transferWithAuthorization (gasless, no private key exposure)
 - Row-level security on all database tables
 - Input validation via Zod schemas
 - HTTPS enforcement in production

@@ -48,7 +48,7 @@ export type WalletErrorCode =
   | 'KEYCHAIN_ERROR';
 
 /**
- * Payment-related errors (x402, permits, transactions)
+ * Payment-related errors (x402, authorizations, transactions)
  */
 export class PaymentError extends AgentStoreError {
   constructor(message: string, code: PaymentErrorCode, context?: Record<string, unknown>) {
@@ -59,8 +59,8 @@ export class PaymentError extends AgentStoreError {
 
 export type PaymentErrorCode =
   | 'PAYMENT_REQUIRED'
-  | 'INVALID_PERMIT'
-  | 'PERMIT_EXPIRED'
+  | 'INVALID_AUTHORIZATION'
+  | 'AUTHORIZATION_EXPIRED'
   | 'TRANSACTION_FAILED'
   | 'TRANSACTION_TIMEOUT'
   | 'INVALID_AMOUNT'

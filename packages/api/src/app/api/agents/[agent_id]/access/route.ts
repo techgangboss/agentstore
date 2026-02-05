@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase';
 import { createPaymentRequired } from '@/lib/x402';
 
-// Facilitator endpoint - set when facilitator is deployed
-const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || null;
+// x402 facilitator endpoint
+const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || '';
 
 /**
  * GET /api/agents/[agent_id]/access
@@ -128,10 +128,10 @@ export async function GET(
   // No entitlement and no payment - return 402 Payment Required
   const paymentRequired = createPaymentRequired({
     amount: pricing.amount,
-    recipient: agent.publisher?.payout_address || '',
+    payTo: agent.publisher?.payout_address || '',
     agentId: agent.agent_id,
     agentName: agent.name,
-    facilitatorEndpoint: FACILITATOR_ENDPOINT || undefined,
+    facilitatorEndpoint: FACILITATOR_ENDPOINT,
   });
 
   return NextResponse.json(
@@ -225,7 +225,6 @@ async function verifyPaymentProof(
   }
 
   // No facilitator available - store intent as pending
-  // User has signed permit, awaiting facilitator to process
   if (proof.nonce) {
     return {
       success: false,

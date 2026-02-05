@@ -23,7 +23,7 @@ AgentStore is the first Claude Code marketplace with built-in payments. While se
 | If 500 active buyers, purchases per buyer | 4 |
 | If 200 active buyers, purchases per buyer | 10 |
 
-**Target timeline: 90 days from today.** The x402 facilitator contract is live — paid transactions are ready to go.
+**Target timeline: 90 days from today.** The x402 facilitator is live — paid transactions are ready to go.
 
 ---
 
@@ -121,7 +121,7 @@ Write 3-5 high-quality articles:
 1. "The MCP Monetization Problem (And How We're Solving It)"
 2. "How I Built a Claude Code Agent That Earns Passive Income"
 3. "5 Claude Code Agents Every Developer Should Install"
-4. "Building a Gasless Payment System with ERC-2612 Permits"
+4. "Building a Gasless Payment System with EIP-3009 and x402"
 5. "The Rise of Agent Marketplaces: Why MCP Changes Everything"
 
 **Channel 5: Partnerships**
@@ -164,13 +164,13 @@ Free agents are the gateway drug:
 
 ### 3.1 Reduce Purchase Friction
 
-The x402 facilitator contract is live. Focus on optimizing the end-to-end flow:
+The x402 facilitator is live. Focus on optimizing the end-to-end flow:
 
 Priority actions:
 1. Test full payment flow end-to-end across different wallet states
 2. Add Coinbase Onramp for users who don't have USDC
 3. Ensure wallet setup is <30 seconds
-4. Optimize permit signing UX (clear confirmation dialog, amount/recipient visible)
+4. Optimize authorization signing UX (clear confirmation dialog, amount/recipient visible)
 
 ### 3.2 Build Trust
 

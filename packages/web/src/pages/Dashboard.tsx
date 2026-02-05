@@ -62,7 +62,7 @@ export function Dashboard() {
       const agentList = agents || [];
       const totalInstalls = agentList.reduce((sum: number, a: any) => sum + (a.download_count || 0), 0);
 
-      // Earnings come from transactions (0 until x402 facilitator is live)
+      // Earnings come from transactions (query entitlements for real data)
       setData({
         agents: agentList,
         totalInstalls,
