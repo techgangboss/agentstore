@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { verifyFinalConfirmation } from '@/lib/payment-verification';
+import crypto from 'crypto';
 
 // This endpoint verifies preconfirmed payments and revokes if not confirmed within deadline
-// Should be called every 15-30 seconds by Vercel Cron or external scheduler
+// Called every minute by Vercel Cron
 
-// Verify cron secret to prevent unauthorized calls
+// Verify cron secret to prevent unauthorized calls (mandatory)
 const CRON_SECRET = process.env.CRON_SECRET;
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
 export async function GET(request: NextRequest) {
-  // Verify authorization
+  // Verify authorization — mandatory
   const authHeader = request.headers.get('authorization');
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET || !authHeader || !timingSafeEqual(authHeader, `Bearer ${CRON_SECRET}`)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

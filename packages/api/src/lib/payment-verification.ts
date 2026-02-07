@@ -7,8 +7,9 @@ const MEV_COMMIT_RPC = 'https://fastrpc.mev-commit.xyz';
 // Minimum confirmations required for final verification
 const MIN_CONFIRMATIONS = 2;
 
-// Time window for preconfirmation to be confirmed (60 seconds)
-export const PRECONF_VERIFICATION_DEADLINE_MS = 60 * 1000;
+// Time window for preconfirmation to be confirmed (5 minutes)
+// Must be longer than the cron interval (1 minute) to avoid premature revocation
+export const PRECONF_VERIFICATION_DEADLINE_MS = 5 * 60 * 1000;
 
 // Create a public client for Ethereum mainnet via mev-commit
 const publicClient = createPublicClient({
@@ -110,7 +111,7 @@ export async function verifyPreconfirmation(
 
     // Check confirmation depth
     const currentBlock = await publicClient.getBlockNumber();
-    const confirmations = currentBlock - receipt.blockNumber;
+    const confirmations = currentBlock > receipt.blockNumber ? currentBlock - receipt.blockNumber : BigInt(0);
 
     // Receipt exists = preconfirmed (or confirmed if enough blocks)
     const status: ConfirmationStatus = confirmations >= MIN_CONFIRMATIONS ? 'confirmed' : 'preconfirmed';
@@ -158,7 +159,7 @@ export async function verifyFinalConfirmation(
     }
 
     const currentBlock = await publicClient.getBlockNumber();
-    const confirmations = currentBlock - receipt.blockNumber;
+    const confirmations = currentBlock > receipt.blockNumber ? currentBlock - receipt.blockNumber : BigInt(0);
 
     if (confirmations >= MIN_CONFIRMATIONS) {
       return { status: 'confirmed', blockNumber: receipt.blockNumber, confirmations };
@@ -190,29 +191,45 @@ export async function isTransactionUsed(
 }
 
 /**
+ * Cached ETH price to avoid excessive CoinGecko calls (rate limited at 10-30/min)
+ */
+let cachedEthPrice: { price: number; fetchedAt: number } | null = null;
+const PRICE_CACHE_TTL = 60 * 1000; // 60 seconds
+
+async function getEthPrice(): Promise<number> {
+  const now = Date.now();
+  if (cachedEthPrice && now - cachedEthPrice.fetchedAt < PRICE_CACHE_TTL) {
+    return cachedEthPrice.price;
+  }
+
+  const response = await fetch(
+    'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
+  );
+  const data = (await response.json()) as { ethereum?: { usd?: number } };
+  const ethPrice = data.ethereum?.usd;
+
+  if (!ethPrice || ethPrice <= 0) {
+    throw new Error('Invalid ETH price from oracle');
+  }
+
+  cachedEthPrice = { price: ethPrice, fetchedAt: now };
+  return ethPrice;
+}
+
+/**
  * Convert USD price to ETH amount using a price oracle
  * For now, uses a simple API call - in production, use Chainlink or similar
  */
 export async function usdToEth(usdAmount: number): Promise<bigint> {
   try {
-    // Fetch ETH price from CoinGecko (free, no API key)
-    const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
-    );
-    const data = (await response.json()) as { ethereum?: { usd?: number } };
-    const ethPrice = data.ethereum?.usd;
-
-    if (!ethPrice || ethPrice <= 0) {
-      throw new Error('Invalid ETH price from oracle');
-    }
-
-    // Convert USD to ETH (with 18 decimal precision)
+    const ethPrice = await getEthPrice();
     const ethAmount = usdAmount / ethPrice;
     return parseEther(ethAmount.toFixed(18));
   } catch (error) {
     console.error('Price oracle error:', error);
-    // Fallback: assume $2000/ETH (will be rejected if wrong)
-    const fallbackEthAmount = usdAmount / 2000;
+    // Fallback: use last known good price, or $2000/ETH as last resort
+    const fallbackPrice = cachedEthPrice?.price || 2000;
+    const fallbackEthAmount = usdAmount / fallbackPrice;
     return parseEther(fallbackEthAmount.toFixed(18));
   }
 }

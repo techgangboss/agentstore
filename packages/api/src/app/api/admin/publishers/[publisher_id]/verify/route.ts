@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
+import crypto from 'crypto';
 
 // Admin secret for verification endpoints
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 /**
  * POST /api/admin/publishers/[publisher_id]/verify
@@ -16,10 +22,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { publisher_id: string } }
 ) {
-  // Check admin authorization
+  // Check admin authorization (timing-safe comparison)
   const adminSecret = request.headers.get('X-Admin-Secret');
 
-  if (!ADMIN_SECRET || adminSecret !== ADMIN_SECRET) {
+  if (!ADMIN_SECRET || !adminSecret || !timingSafeEqual(adminSecret, ADMIN_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

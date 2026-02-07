@@ -1133,20 +1133,19 @@ function setupGateway(): void {
   const possiblePaths = [
     // Installed globally via npm
     path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@agentstore', 'gateway', 'dist', 'index.js'),
-    // Local development
+    // Local development (relative to CLI dist)
     path.join(__dirname, '..', '..', 'gateway', 'dist', 'index.js'),
     // Relative to cwd
     path.join(process.cwd(), 'packages', 'gateway', 'dist', 'index.js'),
-    // Hardcoded for this project
-    '/Users/zion/agentstore/packages/gateway/dist/index.js',
   ];
 
   let gatewayPath = possiblePaths.find((p) => fs.existsSync(p));
 
   if (!gatewayPath) {
-    console.log('⚠️  Gateway not found. Using default path.');
+    // Default to the local dev relative path
+    gatewayPath = path.join(__dirname, '..', '..', 'gateway', 'dist', 'index.js');
+    console.log('⚠️  Gateway not found at expected paths.');
     console.log('   Make sure to build the gateway: cd packages/gateway && npm run build');
-    gatewayPath = '/Users/zion/agentstore/packages/gateway/dist/index.js';
   }
 
   servers['agentstore-gateway'] = {

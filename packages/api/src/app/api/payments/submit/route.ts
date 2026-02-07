@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { z } from 'zod';
 import type { X402PaymentProof } from '@/lib/x402';
-import { PLATFORM_WALLET, PLATFORM_FEE_PERCENT } from '@/lib/x402';
+import { PLATFORM_WALLET, PLATFORM_FEE_PERCENT, calculateFeeSplit } from '@/lib/x402';
 import { PRECONF_VERIFICATION_DEADLINE_MS } from '@/lib/payment-verification';
 
 // x402 facilitator endpoints
@@ -84,7 +84,10 @@ export async function POST(request: NextRequest) {
   }
 
   const expectedAmount = agent.manifest?.pricing?.amount || 0;
-  if (parseFloat(payment_required.amount) !== expectedAmount) {
+  // Compare amounts using integer microdollar arithmetic to avoid floating-point errors
+  const expectedMicro = Math.round(expectedAmount * 1_000_000);
+  const submittedMicro = Math.round(parseFloat(payment_required.amount) * 1_000_000);
+  if (submittedMicro !== expectedMicro) {
     return NextResponse.json(
       { error: 'Payment amount mismatch' },
       { status: 400 }
@@ -107,17 +110,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Calculate fee split: 20% platform, 80% publisher
+  // Calculate fee split using integer arithmetic
   const publisherWallet = agent.publisher?.payout_address || payment_required.payTo;
-  const platformAmount = expectedAmount * (PLATFORM_FEE_PERCENT / 100);
-  const publisherAmount = expectedAmount - platformAmount;
+  const { platformAmount, publisherAmount, platformAmountNum, publisherAmountNum } = calculateFeeSplit(expectedAmount);
 
   const feeSplit = {
     platform_address: PLATFORM_WALLET,
-    platform_amount: platformAmount.toFixed(2),
+    platform_amount: platformAmount,
     platform_percent: PLATFORM_FEE_PERCENT,
     publisher_address: publisherWallet,
-    publisher_amount: publisherAmount.toFixed(2),
+    publisher_amount: publisherAmount,
     publisher_percent: 100 - PLATFORM_FEE_PERCENT,
   };
 
@@ -205,8 +207,8 @@ export async function POST(request: NextRequest) {
         to_address: publisherWallet.toLowerCase(),
         amount: expectedAmount,
         currency: 'USDC',
-        platform_fee: platformAmount,
-        publisher_amount: publisherAmount,
+        platform_fee: platformAmountNum,
+        publisher_amount: publisherAmountNum,
         status: proof.status === 'confirmed' ? 'confirmed' : 'pending',
         block_number: proof.block_number || null,
         confirmations: proof.confirmations || 0,

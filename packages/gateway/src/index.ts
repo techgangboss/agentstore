@@ -61,8 +61,25 @@ class AgentStoreGateway {
   private toolDefinitions: Map<string, { route: GatewayRoute; tool: ToolDefinition }> = new Map();
   private entitlements: Map<string, Entitlement> = new Map();
 
+  private configDirty = false;
+
   constructor() {
     this.loadConfig();
+    this.watchConfigFiles();
+  }
+
+  private watchConfigFiles(): void {
+    const watchOpts = { persistent: false };
+    for (const file of [ROUTES_FILE, ENTITLEMENTS_FILE]) {
+      if (fs.existsSync(file)) {
+        try {
+          fs.watch(file, watchOpts, () => { this.configDirty = true; });
+        } catch {
+          // fs.watch not available on all platforms — fall back to reload on ListTools
+          this.configDirty = true;
+        }
+      }
+    }
   }
 
   private loadConfig(): void {
@@ -121,8 +138,10 @@ class AgentStoreGateway {
     }
   }
 
-  // Reload config (useful when new agents are installed)
+  // Reload config only when files have changed (useful when new agents are installed)
   reloadConfig(): void {
+    if (!this.configDirty) return;
+    this.configDirty = false;
     this.routes.clear();
     this.toolDefinitions.clear();
     this.entitlements.clear();

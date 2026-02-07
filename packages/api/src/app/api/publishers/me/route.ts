@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyApiKey } from '@/lib/api-key';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 // Validate Ethereum address format
 function isValidEthAddress(address: string | undefined): boolean {
   if (!address) return false;
@@ -102,51 +104,46 @@ export async function GET(request: NextRequest) {
 
   const adminSupabase = createAdminClient();
 
-  // Get agent count and IDs
-  const { data: agents } = await adminSupabase
-    .from('agents')
-    .select('id')
-    .eq('publisher_id', publisher.id);
+  // Fetch agents and entitlements with transactions in parallel
+  const [agentsResult, entitlementsResult] = await Promise.all([
+    adminSupabase
+      .from('agents')
+      .select('id')
+      .eq('publisher_id', publisher.id),
+    adminSupabase
+      .from('entitlements')
+      .select(`
+        id,
+        agent_id,
+        transactions(publisher_amount, status, created_at)
+      `)
+      .eq('is_active', true)
+      .neq('confirmation_status', 'revoked'),
+  ]);
 
-  const agentCount = agents?.length || 0;
-  const agentIds = agents?.map(a => a.id) || [];
+  const agents = agentsResult.data || [];
+  const agentCount = agents.length;
+  const agentIdSet = new Set(agents.map(a => a.id));
 
-  let totalSales = 0;
+  // Filter entitlements to only this publisher's agents
+  const publisherEntitlements = (entitlementsResult.data || []).filter(
+    e => agentIdSet.has(e.agent_id)
+  );
+
+  let totalSales = publisherEntitlements.length;
   let totalEarnings = 0;
   let monthlyEarnings = 0;
 
-  if (agentIds.length > 0) {
-    // Get sales count and earnings from transactions via entitlements
-    const { data: entitlements } = await adminSupabase
-      .from('entitlements')
-      .select('id')
-      .in('agent_id', agentIds)
-      .eq('is_active', true)
-      .neq('confirmation_status', 'revoked');
-
-    totalSales = entitlements?.length || 0;
-
-    if (totalSales > 0) {
-      const entitlementIds = entitlements!.map(e => e.id);
-
-      // Total confirmed earnings
-      const { data: txTotals } = await adminSupabase
-        .from('transactions')
-        .select('publisher_amount, status, created_at')
-        .in('entitlement_id', entitlementIds)
-        .in('status', ['confirmed', 'pending']);
-
-      if (txTotals) {
-        totalEarnings = txTotals.reduce(
-          (sum, tx) => sum + (parseFloat(tx.publisher_amount) || 0),
-          0
-        );
-
-        // Monthly earnings (last 30 days)
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        monthlyEarnings = txTotals
-          .filter(tx => tx.created_at >= thirtyDaysAgo)
-          .reduce((sum, tx) => sum + (parseFloat(tx.publisher_amount) || 0), 0);
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  for (const ent of publisherEntitlements) {
+    const txs = ent.transactions as { publisher_amount: string; status: string; created_at: string }[];
+    if (!txs) continue;
+    for (const tx of txs) {
+      if (tx.status !== 'confirmed' && tx.status !== 'pending') continue;
+      const amount = parseFloat(tx.publisher_amount) || 0;
+      totalEarnings += amount;
+      if (tx.created_at >= thirtyDaysAgo) {
+        monthlyEarnings += amount;
       }
     }
   }

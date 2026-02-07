@@ -1,6 +1,20 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import crypto from 'crypto';
+
+// Allowed CORS origins for API requests
+const ALLOWED_ORIGINS = new Set([
+  'https://agentstore.tools',
+  'https://www.agentstore.tools',
+  'https://api.agentstore.dev',
+  ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', 'http://localhost:5173'] : []),
+]);
+
+function getCorsOrigin(request: NextRequest): string {
+  const origin = request.headers.get('origin') || '';
+  return ALLOWED_ORIGINS.has(origin) ? origin : '';
+}
 
 // Check if Redis is configured
 const hasRedis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -44,6 +58,18 @@ if (hasRedis) {
 // Fallback in-memory rate limiting (for local dev or if Redis not configured)
 const memoryRateLimit = new Map<string, { count: number; resetAt: number }>();
 
+// Periodic cleanup of stale entries (every 5 minutes)
+const CLEANUP_INTERVAL = 5 * 60 * 1000;
+let lastCleanup = Date.now();
+function cleanupMemoryRateLimit() {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL) return;
+  lastCleanup = now;
+  memoryRateLimit.forEach((entry, key) => {
+    if (now > entry.resetAt) memoryRateLimit.delete(key);
+  });
+}
+
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const REGISTRATION_WINDOW = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 60;
@@ -77,12 +103,15 @@ function getClientIP(request: NextRequest): string {
   return forwarded?.split(',')[0]?.trim() || realIP || 'unknown';
 }
 
-// CORS headers applied to all API responses
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Wallet-Address, X-Wallet-Signature, X-Payment, X-API-Key',
-};
+// CORS headers applied to all API responses (origin is dynamic per request)
+function getCorsHeaders(request: NextRequest) {
+  return {
+    'Access-Control-Allow-Origin': getCorsOrigin(request),
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Wallet-Address, X-Wallet-Signature, X-Payment, X-API-Key',
+    'Vary': 'Origin',
+  };
+}
 
 // Maximum request body sizes (in bytes)
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB for general API
@@ -102,16 +131,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const corsHeaders = getCorsHeaders(request);
+
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
     return new NextResponse(null, {
       status: 204,
       headers: {
-        ...CORS_HEADERS,
+        ...corsHeaders,
         'Access-Control-Max-Age': '86400',
       },
     });
   }
+
+  // Clean up stale in-memory rate limit entries periodically
+  cleanupMemoryRateLimit();
 
   // Check request body size for POST/PUT/PATCH requests
   if (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH') {
@@ -128,7 +162,7 @@ export async function middleware(request: NextRequest) {
           }),
           {
             status: 413,
-            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
           }
         );
       }
@@ -154,7 +188,7 @@ export async function middleware(request: NextRequest) {
           status: 429,
           headers: {
             'Content-Type': 'application/json',
-            ...CORS_HEADERS,
+            ...corsHeaders,
             'X-RateLimit-Limit': limit.toString(),
             'X-RateLimit-Remaining': '0',
             'X-RateLimit-Reset': Math.ceil(reset / 1000).toString(),
@@ -169,7 +203,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-RateLimit-Remaining', remaining.toString());
     response.headers.set('X-RateLimit-Reset', Math.ceil(reset / 1000).toString());
     // Add CORS headers to actual responses
-    for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    for (const [key, value] of Object.entries(corsHeaders)) {
       response.headers.set(key, value);
     }
     return response;
@@ -195,7 +229,7 @@ export async function middleware(request: NextRequest) {
         status: 429,
         headers: {
           'Content-Type': 'application/json',
-          ...CORS_HEADERS,
+          ...corsHeaders,
           'X-RateLimit-Limit': maxRequests.toString(),
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': Math.ceil(resetIn / 1000).toString(),
@@ -210,7 +244,7 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-RateLimit-Remaining', remaining.toString());
   response.headers.set('X-RateLimit-Reset', Math.ceil(resetIn / 1000).toString());
   // Add CORS headers to actual responses
-  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+  for (const [key, value] of Object.entries(corsHeaders)) {
     response.headers.set(key, value);
   }
 

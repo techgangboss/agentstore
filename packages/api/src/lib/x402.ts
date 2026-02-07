@@ -74,6 +74,25 @@ function generateNonce(): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Use integer arithmetic for USDC fee calculations to avoid floating-point precision errors.
+ * Amounts are scaled to USDC's 6 decimal places (microdollars) for safe math.
+ */
+function calculateFeeSplit(amount: number) {
+  // Scale to microdollars (10^6) for integer arithmetic
+  const totalMicro = Math.round(amount * 1_000_000);
+  const platformMicro = Math.round(totalMicro * PLATFORM_FEE_PERCENT / 100);
+  const publisherMicro = totalMicro - platformMicro;
+  return {
+    platformAmount: (platformMicro / 1_000_000).toFixed(2),
+    publisherAmount: (publisherMicro / 1_000_000).toFixed(2),
+    platformAmountNum: platformMicro / 1_000_000,
+    publisherAmountNum: publisherMicro / 1_000_000,
+  };
+}
+
+export { calculateFeeSplit };
+
 export function createPaymentRequired(params: {
   amount: number;
   payTo: string;
@@ -81,9 +100,7 @@ export function createPaymentRequired(params: {
   agentName: string;
   facilitatorEndpoint: string;
 }): X402PaymentRequired {
-  // Calculate fee split: 20% platform, 80% publisher
-  const platformAmount = params.amount * (PLATFORM_FEE_PERCENT / 100);
-  const publisherAmount = params.amount - platformAmount;
+  const { platformAmount, publisherAmount } = calculateFeeSplit(params.amount);
 
   return {
     amount: params.amount.toFixed(2),
@@ -110,10 +127,10 @@ export function createPaymentRequired(params: {
     expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     fee_split: {
       platform_address: PLATFORM_WALLET,
-      platform_amount: platformAmount.toFixed(2),
+      platform_amount: platformAmount,
       platform_percent: PLATFORM_FEE_PERCENT,
       publisher_address: params.payTo,
-      publisher_amount: publisherAmount.toFixed(2),
+      publisher_amount: publisherAmount,
       publisher_percent: 100 - PLATFORM_FEE_PERCENT,
     },
   };

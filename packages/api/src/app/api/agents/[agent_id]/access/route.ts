@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase';
-import { createPaymentRequired } from '@/lib/x402';
+import { createPaymentRequired, PLATFORM_WALLET, PLATFORM_FEE_PERCENT } from '@/lib/x402';
 
 // x402 facilitator endpoint
 const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || '';
@@ -190,9 +190,23 @@ async function verifyPaymentProof(
         };
 
         if (verification.verified) {
-          const entitlementToken = generateEntitlementToken();
+          // Check for replay: has this tx_hash already been used?
+          if (verification.tx_hash) {
+            const { data: existingTx } = await supabase
+              .from('transactions')
+              .select('id')
+              .eq('tx_hash', verification.tx_hash.toLowerCase())
+              .single();
+            if (existingTx) {
+              return { success: false, error: 'Transaction already used for a purchase' };
+            }
+          }
 
-          await supabase.from('entitlements').insert({
+          const entitlementToken = generateEntitlementToken();
+          const platformAmount = expectedAmount * (PLATFORM_FEE_PERCENT / 100);
+          const publisherAmount = expectedAmount - platformAmount;
+
+          const { data: entitlement, error: entitlementError } = await supabase.from('entitlements').insert({
             agent_id: agentUuid,
             wallet_address: walletAddress,
             entitlement_token: entitlementToken,
@@ -201,7 +215,26 @@ async function verifyPaymentProof(
             currency: 'USDC',
             is_active: true,
             confirmation_status: 'confirmed',
-          });
+          }).select().single();
+
+          if (entitlementError) {
+            return { success: false, error: 'Failed to create entitlement' };
+          }
+
+          // Record transaction for earnings tracking and replay protection
+          if (verification.tx_hash) {
+            await supabase.from('transactions').insert({
+              entitlement_id: entitlement.id,
+              tx_hash: verification.tx_hash.toLowerCase(),
+              from_address: walletAddress,
+              to_address: PLATFORM_WALLET.toLowerCase(),
+              amount: expectedAmount,
+              currency: 'USDC',
+              platform_fee: platformAmount,
+              publisher_amount: publisherAmount,
+              status: 'confirmed',
+            });
+          }
 
           return {
             success: true,

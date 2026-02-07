@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
   // Check if agent already exists
   const { data: existingAgent } = await adminSupabase
     .from('agents')
-    .select('id, version')
+    .select('id, version, publisher_id')
     .eq('agent_id', data.agent_id)
     .single();
 
@@ -238,6 +238,14 @@ export async function POST(request: NextRequest) {
   };
 
   if (existingAgent) {
+    // Verify ownership: the authenticated publisher must own this agent
+    if (existingAgent.publisher_id !== publisher.id) {
+      return NextResponse.json(
+        { error: 'You do not own this agent and cannot update it' },
+        { status: 403 }
+      );
+    }
+
     // Update existing agent
     const { data: agent, error: updateError } = await adminSupabase
       .from('agents')
@@ -296,7 +304,7 @@ export async function POST(request: NextRequest) {
       manifest,
       is_published: true, // Auto-publish - no review required
     })
-    .select('agent_id, name, version, created_at')
+    .select('id, agent_id, name, version, created_at')
     .single();
 
   if (createError) {
@@ -307,13 +315,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create agent' }, { status: 500 });
   }
 
-  // Handle tags
+  // Handle tags — use agent.id from insert result instead of re-querying
   if (data.tags.length > 0) {
-    // Get or create tags
     for (const tagName of data.tags) {
       const slug = tagName.toLowerCase().replace(/\s+/g, '-');
 
-      // Upsert tag
       const { data: tag } = await adminSupabase
         .from('tags')
         .upsert({ name: tagName, slug }, { onConflict: 'slug' })
@@ -321,18 +327,9 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (tag) {
-        // Get the new agent's UUID
-        const { data: newAgent } = await adminSupabase
-          .from('agents')
-          .select('id')
-          .eq('agent_id', data.agent_id)
-          .single();
-
-        if (newAgent) {
-          await adminSupabase
-            .from('agent_tags')
-            .upsert({ agent_id: newAgent.id, tag_id: tag.id });
-        }
+        await adminSupabase
+          .from('agent_tags')
+          .upsert({ agent_id: agent.id, tag_id: tag.id });
       }
     }
   }
