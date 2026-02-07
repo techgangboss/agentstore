@@ -34,6 +34,7 @@ export function Navbar() {
               <a href="/#about" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">About</a>
               <a href="/#marketplace" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Marketplace</a>
               <a href="/#builders" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Publishers</a>
+              <a href="/#for-agents" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">For Agents</a>
 
               {user && publisher ? (
                 <>
