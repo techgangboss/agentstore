@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
+import { verifyApiKey } from '@/lib/api-key';
 import { z } from 'zod';
 
 // Validate Ethereum address format
@@ -31,24 +32,75 @@ async function getAuthUser(request: NextRequest) {
   return user;
 }
 
+const PUBLISHER_SELECT = 'id, publisher_id, display_name, email, payout_address, support_url, created_at, updated_at';
+
+/**
+ * Resolve publisher from X-API-Key, wallet signature headers, or Bearer token.
+ */
+async function getPublisher(request: NextRequest) {
+  const adminSupabase = createAdminClient();
+
+  // 1. API key
+  const apiKeyPublisher = await verifyApiKey(request);
+  if (apiKeyPublisher) {
+    const { data: publisher } = await adminSupabase
+      .from('publishers')
+      .select(PUBLISHER_SELECT)
+      .eq('id', apiKeyPublisher.id)
+      .single();
+    return publisher;
+  }
+
+  // 2. Wallet signature (X-Wallet-Address + X-Wallet-Signature)
+  const walletAddress = request.headers.get('X-Wallet-Address');
+  const walletSignature = request.headers.get('X-Wallet-Signature');
+  if (walletAddress && walletSignature) {
+    const { data: publisher } = await adminSupabase
+      .from('publishers')
+      .select(PUBLISHER_SELECT)
+      .ilike('payout_address', walletAddress)
+      .single();
+
+    if (!publisher) return null;
+
+    // Verify signature: "AgentStore publisher: {publisher_id}"
+    const expectedMessage = `AgentStore publisher: ${publisher.publisher_id}`;
+    try {
+      const { verifyMessage } = await import('viem');
+      const isValid = await verifyMessage({
+        address: walletAddress as `0x${string}`,
+        message: expectedMessage,
+        signature: walletSignature as `0x${string}`,
+      });
+      if (!isValid) return null;
+    } catch {
+      return null;
+    }
+
+    return publisher;
+  }
+
+  // 3. Bearer token (web dashboard)
+  const user = await getAuthUser(request);
+  if (!user) return null;
+
+  const { data: publisher } = await adminSupabase
+    .from('publishers')
+    .select(PUBLISHER_SELECT)
+    .eq('auth_user_id', user.id)
+    .single();
+
+  return publisher;
+}
+
 // GET /api/publishers/me - Get current publisher profile with real stats
 export async function GET(request: NextRequest) {
-  const user = await getAuthUser(request);
-  if (!user) {
+  const publisher = await getPublisher(request);
+  if (!publisher) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const adminSupabase = createAdminClient();
-
-  const { data: publisher, error } = await adminSupabase
-    .from('publishers')
-    .select('id, publisher_id, display_name, email, payout_address, support_url, created_at, updated_at')
-    .eq('auth_user_id', user.id)
-    .single();
-
-  if (error || !publisher) {
-    return NextResponse.json({ error: 'Publisher not found' }, { status: 404 });
-  }
 
   // Get agent count and IDs
   const { data: agents } = await adminSupabase
@@ -120,8 +172,8 @@ const UpdatePublisherSchema = z.object({
 
 // PATCH /api/publishers/me - Update current publisher profile
 export async function PATCH(request: NextRequest) {
-  const user = await getAuthUser(request);
-  if (!user) {
+  const currentPublisher = await getPublisher(request);
+  if (!currentPublisher) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -166,7 +218,7 @@ export async function PATCH(request: NextRequest) {
   const { data: publisher, error } = await adminSupabase
     .from('publishers')
     .update(updates)
-    .eq('auth_user_id', user.id)
+    .eq('id', currentPublisher.id)
     .select('id, publisher_id, display_name, email, payout_address, support_url, created_at, updated_at')
     .single();
 

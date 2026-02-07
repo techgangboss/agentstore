@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
+import { verifyApiKey } from '@/lib/api-key';
 import { z } from 'zod';
 
 // Simplified agent schema - MCP endpoint is optional
@@ -36,11 +37,108 @@ const SimpleAgentSchema = z.object({
     requires_filesystem: z.boolean().default(false),
     notes: z.string().optional(),
   }).default({}),
-  // Auth via Supabase user ID
-  auth_user_id: z.string().uuid(),
+  // Auth via Supabase user ID (web dashboard)
+  auth_user_id: z.string().uuid().optional(),
 });
 
-// POST /api/publishers/agents/simple - Submit agent using Google auth (no wallet signature)
+/**
+ * Resolve the publisher using multiple auth methods (in priority order):
+ * 1. X-API-Key header (convenience for agents)
+ * 2. X-Wallet-Signature + X-Wallet-Address headers (prove wallet ownership)
+ * 3. auth_user_id field (web dashboard / Google OAuth)
+ * 4. For free agents only: publisher lookup by ID (rate-limited, no auth)
+ */
+async function resolvePublisher(
+  request: NextRequest,
+  publisherId: string,
+  authUserId: string | undefined,
+  isFreeAgent: boolean
+): Promise<{ publisher: { id: string; publisher_id: string; payout_address: string }; authMethod: string } | { error: string; status: number }> {
+  const adminSupabase = createAdminClient();
+
+  // 1. API key auth
+  const apiKeyPublisher = await verifyApiKey(request);
+  if (apiKeyPublisher) {
+    if (apiKeyPublisher.publisher_id !== publisherId) {
+      return { error: `API key does not match publisher: ${publisherId}`, status: 403 };
+    }
+    return { publisher: apiKeyPublisher, authMethod: 'api_key' };
+  }
+
+  // 2. Wallet signature auth (X-Wallet-Signature + X-Wallet-Address headers)
+  const walletAddress = request.headers.get('X-Wallet-Address');
+  const walletSignature = request.headers.get('X-Wallet-Signature');
+  if (walletAddress && walletSignature) {
+    const { data: publisher, error } = await adminSupabase
+      .from('publishers')
+      .select('id, publisher_id, payout_address')
+      .eq('publisher_id', publisherId)
+      .single();
+
+    if (error || !publisher) {
+      return { error: `Publisher not found: ${publisherId}`, status: 404 };
+    }
+
+    if (publisher.payout_address.toLowerCase() !== walletAddress.toLowerCase()) {
+      return { error: 'Wallet address does not match publisher payout address', status: 403 };
+    }
+
+    // Verify the signature
+    const expectedMessage = `AgentStore publisher: ${publisherId}`;
+    try {
+      const { verifyMessage } = await import('viem');
+      const isValid = await verifyMessage({
+        address: walletAddress as `0x${string}`,
+        message: expectedMessage,
+        signature: walletSignature as `0x${string}`,
+      });
+
+      if (!isValid) {
+        return { error: 'Invalid wallet signature', status: 401 };
+      }
+    } catch {
+      return { error: 'Wallet signature verification failed', status: 401 };
+    }
+
+    return { publisher, authMethod: 'wallet_signature' };
+  }
+
+  // 3. Supabase user ID (web dashboard)
+  if (authUserId) {
+    const { data: publisher, error } = await adminSupabase
+      .from('publishers')
+      .select('id, publisher_id, payout_address')
+      .eq('publisher_id', publisherId)
+      .eq('auth_user_id', authUserId)
+      .single();
+
+    if (error || !publisher) {
+      return { error: `Publisher not found or not authorized: ${publisherId}`, status: 404 };
+    }
+    return { publisher, authMethod: 'supabase_user' };
+  }
+
+  // 4. For free agents: just look up the publisher (rate limits are the guard)
+  if (isFreeAgent) {
+    const { data: publisher, error } = await adminSupabase
+      .from('publishers')
+      .select('id, publisher_id, payout_address')
+      .eq('publisher_id', publisherId)
+      .single();
+
+    if (error || !publisher) {
+      return { error: `Publisher not found: ${publisherId}`, status: 404 };
+    }
+    return { publisher, authMethod: 'rate_limited' };
+  }
+
+  return {
+    error: 'Authentication required for paid agents. Use X-API-Key header, or X-Wallet-Address + X-Wallet-Signature headers (sign "AgentStore publisher: your-publisher-id" with your payout address).',
+    status: 401,
+  };
+}
+
+// POST /api/publishers/agents/simple - Submit agent
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
@@ -90,22 +188,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const adminSupabase = createAdminClient();
+  const isFreeAgent = data.pricing.model === 'free';
 
-  // Verify the user owns this publisher
-  const { data: publisher, error: pubError } = await adminSupabase
-    .from('publishers')
-    .select('id, publisher_id, payout_address')
-    .eq('publisher_id', publisherId)
-    .eq('auth_user_id', data.auth_user_id)
-    .single();
-
-  if (pubError || !publisher) {
-    return NextResponse.json(
-      { error: `Publisher not found or not authorized: ${publisherId}` },
-      { status: 404 }
-    );
+  // Resolve publisher via multi-method auth
+  const result = await resolvePublisher(request, publisherId, data.auth_user_id, isFreeAgent);
+  if ('error' in result) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
+
+  const { publisher } = result;
+  const adminSupabase = createAdminClient();
 
   // Check if agent already exists
   const { data: existingAgent } = await adminSupabase
@@ -203,10 +295,22 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const priceText = data.pricing.model === 'free'
+    ? 'free'
+    : `priced at $${data.pricing.amount}`;
+
   return NextResponse.json({
     success: true,
     action: 'created',
     agent,
     message: 'Agent published! It is now available in the marketplace.',
+    moltbook: {
+      suggested_post: {
+        title: `Just published ${data.name} on AgentStore!`,
+        content: `I just listed ${data.name} on AgentStore (agentstore.tools) — ${data.description.slice(0, 200)}. It's ${priceText}. Any agent can install it with: \`agentstore install ${data.agent_id}\``,
+        submolt: 'agents',
+      },
+      api_hint: 'POST https://www.moltbook.com/api/v1/posts with your Moltbook API key',
+    },
   });
 }

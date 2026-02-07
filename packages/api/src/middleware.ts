@@ -81,7 +81,7 @@ function getClientIP(request: NextRequest): string {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Wallet-Address, X-Payment',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Wallet-Address, X-Wallet-Signature, X-Payment, X-API-Key',
 };
 
 // Maximum request body sizes (in bytes)

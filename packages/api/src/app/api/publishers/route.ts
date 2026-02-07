@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase';
+import { generateApiKey } from '@/lib/api-key';
 import { z } from 'zod';
 
 // Mark as dynamic since we use searchParams
@@ -106,6 +107,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Generate API key for programmatic access
+  const { key: apiKey, hash: apiKeyHash } = generateApiKey();
+
   // Create publisher
   const { data: publisher, error: createError } = await adminSupabase
     .from('publishers')
@@ -115,6 +119,7 @@ export async function POST(request: NextRequest) {
       payout_address,
       email: email || null,
       support_url: support_url || null,
+      api_key_hash: apiKeyHash,
     })
     .select('publisher_id, display_name, payout_address, email, support_url, created_at')
     .single();
@@ -129,8 +134,9 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     publisher,
+    api_key: apiKey,
     message: usedDefaultAddress
-      ? 'Publisher registered. Note: Invalid wallet address provided, using platform wallet as default. Update your payout address to receive payments.'
-      : 'Publisher registered successfully. You can now submit agents.',
+      ? 'Publisher registered. Save your API key — it won\'t be shown again. Note: Invalid wallet address provided, using platform wallet as default. Update your payout address to receive payments.'
+      : 'Publisher registered successfully. Save your API key — it won\'t be shown again. You can now submit agents.',
   });
 }

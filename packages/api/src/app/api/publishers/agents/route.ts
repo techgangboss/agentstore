@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
+import { verifyApiKey } from '@/lib/api-key';
 import { z } from 'zod';
 
 // Agent manifest schema matching the spec
@@ -55,9 +56,9 @@ const SubmitAgentSchema = z.object({
   }),
   permissions: PermissionsSchema,
   tags: z.array(z.string()).max(5),
-  // Auth: wallet signature
-  signature: z.string().regex(/^0x[a-fA-F0-9]+$/),
-  message: z.string(),
+  // Auth: wallet signature (optional if using X-API-Key header)
+  signature: z.string().regex(/^0x[a-fA-F0-9]+$/).optional(),
+  message: z.string().optional(),
 });
 
 // POST /api/publishers/agents - Submit a new agent
@@ -110,48 +111,115 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const isFreeAgent = data.pricing.model === 'free';
   const adminSupabase = createAdminClient();
 
-  // Get publisher and verify ownership
-  const { data: publisher, error: pubError } = await adminSupabase
-    .from('publishers')
-    .select('id, publisher_id, payout_address')
-    .eq('publisher_id', publisherId)
-    .single();
+  // Auth priority: API key → wallet signature header → body signature → rate-limited (free only)
+  const apiKeyPublisher = await verifyApiKey(request);
+  let publisher: { id: string; publisher_id: string; payout_address: string };
 
-  if (pubError || !publisher) {
-    return NextResponse.json(
-      { error: `Publisher not found: ${publisherId}` },
-      { status: 404 }
-    );
-  }
-
-  // Verify signature matches publisher's payout address
-  const expectedMessage = `Submit agent to AgentStore: ${data.agent_id} v${data.version}`;
-  if (data.message !== expectedMessage) {
-    return NextResponse.json(
-      { error: `Invalid message. Expected: "${expectedMessage}"` },
-      { status: 400 }
-    );
-  }
-
-  const { verifyMessage } = await import('viem');
-  try {
-    const isValid = await verifyMessage({
-      address: publisher.payout_address as `0x${string}`,
-      message: data.message,
-      signature: data.signature as `0x${string}`,
-    });
-
-    if (!isValid) {
+  if (apiKeyPublisher) {
+    // 1. API key auth
+    if (apiKeyPublisher.publisher_id !== publisherId) {
       return NextResponse.json(
-        { error: 'Invalid signature - must be signed by publisher payout address' },
-        { status: 401 }
+        { error: `API key does not match publisher: ${publisherId}` },
+        { status: 403 }
       );
     }
-  } catch (error) {
-    console.error('Signature verification error:', error);
-    return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
+    publisher = apiKeyPublisher;
+  } else if (request.headers.get('X-Wallet-Address') && request.headers.get('X-Wallet-Signature')) {
+    // 2. Wallet signature header auth
+    const walletAddress = request.headers.get('X-Wallet-Address')!;
+    const walletSignature = request.headers.get('X-Wallet-Signature')!;
+
+    const { data: pubData, error: pubError } = await adminSupabase
+      .from('publishers')
+      .select('id, publisher_id, payout_address')
+      .eq('publisher_id', publisherId)
+      .single();
+
+    if (pubError || !pubData) {
+      return NextResponse.json({ error: `Publisher not found: ${publisherId}` }, { status: 404 });
+    }
+
+    if (pubData.payout_address.toLowerCase() !== walletAddress.toLowerCase()) {
+      return NextResponse.json({ error: 'Wallet address does not match publisher payout address' }, { status: 403 });
+    }
+
+    const expectedMsg = `AgentStore publisher: ${publisherId}`;
+    try {
+      const { verifyMessage } = await import('viem');
+      const isValid = await verifyMessage({
+        address: walletAddress as `0x${string}`,
+        message: expectedMsg,
+        signature: walletSignature as `0x${string}`,
+      });
+      if (!isValid) {
+        return NextResponse.json({ error: 'Invalid wallet signature' }, { status: 401 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'Wallet signature verification failed' }, { status: 401 });
+    }
+
+    publisher = pubData;
+  } else if (data.signature && data.message) {
+    // 3. Body signature auth (existing CLI flow)
+    const { data: pubData, error: pubError } = await adminSupabase
+      .from('publishers')
+      .select('id, publisher_id, payout_address')
+      .eq('publisher_id', publisherId)
+      .single();
+
+    if (pubError || !pubData) {
+      return NextResponse.json({ error: `Publisher not found: ${publisherId}` }, { status: 404 });
+    }
+
+    const expectedMessage = `Submit agent to AgentStore: ${data.agent_id} v${data.version}`;
+    if (data.message !== expectedMessage) {
+      return NextResponse.json(
+        { error: `Invalid message. Expected: "${expectedMessage}"` },
+        { status: 400 }
+      );
+    }
+
+    const { verifyMessage } = await import('viem');
+    try {
+      const isValid = await verifyMessage({
+        address: pubData.payout_address as `0x${string}`,
+        message: data.message,
+        signature: data.signature as `0x${string}`,
+      });
+
+      if (!isValid) {
+        return NextResponse.json(
+          { error: 'Invalid signature - must be signed by publisher payout address' },
+          { status: 401 }
+        );
+      }
+    } catch (error) {
+      console.error('Signature verification error:', error);
+      return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
+    }
+
+    publisher = pubData;
+  } else if (isFreeAgent) {
+    // 4. Rate-limited access for free agents (no auth needed)
+    const { data: pubData, error: pubError } = await adminSupabase
+      .from('publishers')
+      .select('id, publisher_id, payout_address')
+      .eq('publisher_id', publisherId)
+      .single();
+
+    if (pubError || !pubData) {
+      return NextResponse.json({ error: `Publisher not found: ${publisherId}` }, { status: 404 });
+    }
+
+    publisher = pubData;
+  } else {
+    return NextResponse.json(
+      { error: 'Authentication required for paid agents. Use X-API-Key header, X-Wallet-Address + X-Wallet-Signature headers, or signature/message fields.' },
+      { status: 401 }
+    );
   }
 
   // Check if agent already exists
@@ -269,10 +337,22 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const priceText = data.pricing.model === 'free'
+    ? 'free'
+    : `priced at $${data.pricing.amount}`;
+
   return NextResponse.json({
     success: true,
     action: 'created',
     agent,
     message: 'Agent published! It is now available in the marketplace.',
+    moltbook: {
+      suggested_post: {
+        title: `Just published ${data.name} on AgentStore!`,
+        content: `I just listed ${data.name} on AgentStore (agentstore.tools) — ${data.description.slice(0, 200)}. It's ${priceText}. Any agent can install it with: \`agentstore install ${data.agent_id}\``,
+        submolt: 'agents',
+      },
+      api_hint: 'POST https://www.moltbook.com/api/v1/posts with your Moltbook API key',
+    },
   });
 }
