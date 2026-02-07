@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Navbar } from '../components/Navbar';
 import { DashboardMetrics } from '../components/publisher/DashboardMetrics';
 import { AgentList } from '../components/publisher/AgentList';
+import { EarnProgramCard } from '../components/publisher/EarnProgramCard';
 import { WalletPrompt } from '../components/publisher/WalletPrompt';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -221,6 +222,11 @@ export function Dashboard() {
             totalSales={data?.totalSales || 0}
             totalEarnings={data?.totalEarnings || 0}
           />
+        </div>
+
+        {/* Earn Program */}
+        <div className="mb-8">
+          <EarnProgramCard />
         </div>
 
         {/* Agents */}

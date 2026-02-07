@@ -4,6 +4,7 @@ import { About } from '../components/About';
 import { GetStarted } from '../components/GetStarted';
 import { Marketplace } from '../components/Marketplace';
 import { Builders } from '../components/Builders';
+import { EarnProgram } from '../components/EarnProgram';
 import { Docs } from '../components/Docs';
 import { Footer } from '../components/Footer';
 
@@ -19,6 +20,9 @@ export function Home() {
       </div>
       <div id="builders">
         <Builders />
+      </div>
+      <div id="earn">
+        <EarnProgram />
       </div>
       <div id="docs">
         <Docs />

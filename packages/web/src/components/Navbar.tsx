@@ -34,6 +34,7 @@ export function Navbar() {
               <a href="/#get-started" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Get Started</a>
               <a href="/#marketplace" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Marketplace</a>
               <a href="/#builders" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Publishers</a>
+              <a href="/#earn" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Earn</a>
               <a href="/#about" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">About</a>
 
               {user && publisher ? (
