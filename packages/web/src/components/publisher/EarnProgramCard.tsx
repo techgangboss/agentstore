@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Trophy, TrendingUp, DollarSign } from 'lucide-react';
+import { Trophy, TrendingUp, DollarSign, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface EarnStats {
   current_month: {
     rank: number | null;
     total_publishers: number;
+    my_platform_fees: number;
     share_percent: number;
     estimated_earn: number;
     total_earn_pool: number;
@@ -64,6 +65,7 @@ export function EarnProgramCard() {
 
   const current = data?.current_month;
   const history = data?.history?.slice(0, 6) || [];
+  const sharePercent = current?.share_percent || 0;
 
   return (
     <div className="bg-[#1a1a1a] rounded-xl border border-white/10 p-6">
@@ -72,11 +74,20 @@ export function EarnProgramCard() {
           <Trophy className="w-5 h-5 text-teal-400" />
           <h3 className="text-lg font-semibold text-white">Earn Program</h3>
         </div>
-        {data?.total_earned ? (
-          <span className="text-sm text-teal-400 font-medium">
-            ${data.total_earned.toFixed(2)} earned total
-          </span>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {data?.total_earned ? (
+            <span className="text-sm text-teal-400 font-medium">
+              ${data.total_earned.toFixed(2)} earned total
+            </span>
+          ) : null}
+          <a
+            href="/#earn"
+            className="text-xs text-gray-400 hover:text-teal-400 transition-colors flex items-center gap-1"
+          >
+            Leaderboard
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
       </div>
 
       {/* Current month stats */}
@@ -90,17 +101,17 @@ export function EarnProgramCard() {
             {current?.rank ? `#${current.rank}` : '-'}
           </p>
           {current?.total_publishers ? (
-            <p className="text-xs text-gray-500">of {current.total_publishers}</p>
+            <p className="text-xs text-gray-500">of {current.total_publishers} publishers</p>
           ) : null}
         </div>
 
         <div className="bg-white/5 rounded-lg p-4">
           <div className="flex items-center gap-1.5 text-gray-400 text-xs mb-1">
             <TrendingUp className="w-3.5 h-3.5" />
-            Share
+            Pool Share
           </div>
           <p className="text-xl font-bold text-white">
-            {current?.share_percent ? `${current.share_percent.toFixed(1)}%` : '-'}
+            {sharePercent ? `${sharePercent.toFixed(1)}%` : '-'}
           </p>
         </div>
 
@@ -112,6 +123,28 @@ export function EarnProgramCard() {
           <p className="text-xl font-bold text-teal-400">
             {current?.estimated_earn ? `$${current.estimated_earn.toFixed(2)}` : '$0.00'}
           </p>
+        </div>
+      </div>
+
+      {/* Pool share progress bar */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between text-xs mb-2">
+          <span className="text-gray-400">Your share of this month's pool</span>
+          <span className="text-gray-300">
+            Pool: ${(current?.total_earn_pool || 0).toFixed(2)} USDC
+          </span>
+        </div>
+        <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-teal-500 to-cyan-400 rounded-full transition-all duration-500"
+            style={{ width: `${Math.min(sharePercent, 100)}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-xs mt-1">
+          <span className="text-gray-500">{sharePercent.toFixed(1)}% of pool</span>
+          {current?.my_platform_fees ? (
+            <span className="text-gray-500">${current.my_platform_fees.toFixed(2)} in fees generated</span>
+          ) : null}
         </div>
       </div>
 

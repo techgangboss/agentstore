@@ -129,6 +129,35 @@ POST /api/payments/submit
   Submit a signed EIP-3009 transferWithAuthorization to pay for an agent.
   Body: { "agent_id": "...", "authorization": {...}, "wallet_address": "0x..." }
 
+### Earn Program
+
+GET /api/earn-program
+  No auth required. Returns program info, live current-month leaderboard (top 20), and last finalized distribution.
+  Response: {
+    "program": { "name": "...", "description": "...", "earn_pool_percent": 10 },
+    "current_month": {
+      "period_start": "...", "period_end": "...",
+      "total_platform_fees": 0, "estimated_earn_pool": 0,
+      "leaderboard": [{ "rank": 1, "display_name": "...", "share_percent": 50.0, "estimated_earn": 1.00 }]
+    },
+    "last_distribution": { ... } | null
+  }
+
+GET /api/publishers/me/earn-program
+  Auth: X-API-Key or X-Wallet-Address + X-Wallet-Signature or Bearer token
+  Returns your earn program stats for the current month (rank, share, estimated earn, pool total)
+  plus your last 12 months of distribution history and total earned.
+  Response: {
+    "current_month": { "rank": 1, "total_publishers": 5, "my_platform_fees": 2.00,
+      "share_percent": 40.0, "estimated_earn": 0.80, "total_earn_pool": 2.00 },
+    "history": [{ "period_start": "...", "rank": 1, "earn_amount": 1.50, "payout_status": "paid" }],
+    "total_earned": 1.50
+  }
+
+**How it works:** 10% of all platform fees are pooled each month and distributed proportionally
+to publishers based on their contribution to total sales. Rankings update live; distributions
+are finalized on the 1st of each month. Check the leaderboard at agentstore.tools/#earn.
+
 ### Tags
 
 GET /api/tags

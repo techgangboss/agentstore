@@ -22,6 +22,8 @@ interface DashboardData {
   totalInstalls: number;
   totalSales: number;
   totalEarnings: number;
+  earnRank: number | null;
+  earnEstimated: number;
 }
 
 export function Dashboard() {
@@ -63,22 +65,34 @@ export function Dashboard() {
       const agentList = agents || [];
       const totalInstalls = agentList.reduce((sum: number, a: any) => sum + (a.download_count || 0), 0);
 
-      // Fetch real earnings from publisher API
+      // Fetch real earnings and earn program stats in parallel
       let totalSales = 0;
       let totalEarnings = 0;
+      let earnRank: number | null = null;
+      let earnEstimated = 0;
 
       try {
         const session = await supabase.auth.getSession();
         const token = session.data.session?.access_token;
         if (token) {
           const apiUrl = import.meta.env.VITE_API_URL || '';
-          const meResponse = await fetch(`${apiUrl}/api/publishers/me`, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          });
+          const [meResponse, earnResponse] = await Promise.all([
+            fetch(`${apiUrl}/api/publishers/me`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+            }),
+            fetch(`${apiUrl}/api/publishers/me/earn-program`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+            }),
+          ]);
           if (meResponse.ok) {
             const meData = await meResponse.json();
             totalSales = meData.publisher?.stats?.total_sales || 0;
             totalEarnings = meData.publisher?.stats?.total_earnings || 0;
+          }
+          if (earnResponse.ok) {
+            const earnData = await earnResponse.json();
+            earnRank = earnData.current_month?.rank || null;
+            earnEstimated = earnData.current_month?.estimated_earn || 0;
           }
         }
       } catch (e) {
@@ -90,6 +104,8 @@ export function Dashboard() {
         totalInstalls,
         totalSales,
         totalEarnings,
+        earnRank,
+        earnEstimated,
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -221,6 +237,8 @@ export function Dashboard() {
             totalInstalls={data?.totalInstalls || 0}
             totalSales={data?.totalSales || 0}
             totalEarnings={data?.totalEarnings || 0}
+            earnRank={data?.earnRank}
+            earnEstimated={data?.earnEstimated}
           />
         </div>
 

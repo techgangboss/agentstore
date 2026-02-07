@@ -26,6 +26,7 @@ An open-source marketplace for Claude Code plugins with gasless USDC payments.
 - **Publisher Dashboard** — Track agents, sales, and earnings
 - **Publisher Monetization** — 80/20 revenue split (publisher/platform)
 - **Verified Publishers** — Admin-controlled verification badges for trusted publishers
+- **Publisher Earn Program** — 10% of platform fees pooled monthly and distributed to top publishers proportionally
 - **Wallet Integration** — Local encrypted wallet with Coinbase Onramp
 - **Free & Paid Agents** — Flexible pricing models
 - **Simple Agents** — Submit prompt-based agents without MCP endpoints
@@ -191,6 +192,30 @@ Fee breakdown is included in every 402 response:
 
 ---
 
+## Publisher Earn Program
+
+On top of the 80% revenue share, publishers can earn **bonus USDC** from the monthly Earn Pool:
+
+- **10% of all platform fees** are pooled each month
+- Distributed proportionally based on each publisher's share of total sales
+- Rankings update **live** on the leaderboard at [agentstore.tools/#earn](https://agentstore.tools/#earn)
+- Finalized distributions are computed on the 1st of each month
+
+**Example:** If $1,000 in platform fees are collected in a month, $100 goes into the earn pool. A publisher responsible for 40% of sales receives $40 as an earn bonus — on top of their standard 80% revenue share.
+
+### API Endpoints
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/earn-program` | None | Live leaderboard, current month stats, last distribution |
+| `GET /api/publishers/me/earn-program` | Required | Your rank, share %, estimated earn, 12-month history |
+
+### Dashboard
+
+Logged-in publishers see their earn rank, pool share, and estimated bonus in the dashboard metrics bar, plus a detailed Earn Program card with a progress bar and distribution history.
+
+---
+
 ## x402 Payment Protocol
 
 AgentStore uses the x402 standard for gasless USDC payments on Ethereum mainnet via EIP-3009 `transferWithAuthorization`:
@@ -327,6 +352,9 @@ VITE_API_URL=https://api-inky-seven.vercel.app
 | `/api/ai/describe` | POST | Generate agent description via Gemini AI |
 | `/api/purchase` | POST | Purchase agent with ETH payment |
 | `/api/onramp/session` | POST | Create Coinbase Onramp session |
+| `/api/earn-program` | GET | Public earn program leaderboard and stats |
+| `/api/publishers/me/earn-program` | GET | Authenticated publisher earn stats and history |
+| `/api/cron/earn-distribution` | GET | Monthly earn distribution cron (CRON_SECRET) |
 | `/api/admin/publishers/[id]/verify` | POST | Toggle publisher verification (admin only) |
 
 ---

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ShieldCheck, Cpu, Globe, Zap } from 'lucide-react';
+import { ShieldCheck, Cpu, Globe, Zap, Trophy } from 'lucide-react';
 
 export function About() {
   const features = [
@@ -23,6 +23,11 @@ export function About() {
       icon: Zap,
       title: "Instant Deployment",
       description: "One-command installation gets your agents running in seconds with no complex configuration."
+    },
+    {
+      icon: Trophy,
+      title: "Publisher Earn Program",
+      description: "10% of platform fees are pooled monthly and distributed to top publishers. Sell more, earn more — tracked on a live leaderboard."
     }
   ];
 

@@ -1,14 +1,16 @@
 import React from 'react';
-import { Package, Download, ShoppingCart, DollarSign } from 'lucide-react';
+import { Package, Download, ShoppingCart, DollarSign, Trophy, Gift } from 'lucide-react';
 
 interface MetricsProps {
   totalAgents: number;
   totalInstalls: number;
   totalSales: number;
   totalEarnings: number;
+  earnRank?: number | null;
+  earnEstimated?: number;
 }
 
-export function DashboardMetrics({ totalAgents, totalInstalls, totalSales, totalEarnings }: MetricsProps) {
+export function DashboardMetrics({ totalAgents, totalInstalls, totalSales, totalEarnings, earnRank, earnEstimated }: MetricsProps) {
   const metrics = [
     {
       label: 'Published Agents',
@@ -38,10 +40,24 @@ export function DashboardMetrics({ totalAgents, totalInstalls, totalSales, total
       color: 'text-teal-400',
       bgColor: 'bg-teal-500/10',
     },
+    {
+      label: 'Earn Rank',
+      value: earnRank ? `#${earnRank}` : '-',
+      icon: Trophy,
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-500/10',
+    },
+    {
+      label: 'Earn Bonus (est.)',
+      value: earnEstimated ? `$${earnEstimated.toFixed(2)}` : '$0.00',
+      icon: Gift,
+      color: 'text-pink-400',
+      bgColor: 'bg-pink-500/10',
+    },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
       {metrics.map((metric) => (
         <div
           key={metric.label}

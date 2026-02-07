@@ -24,6 +24,7 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 - [x] Landing page (https://agentstore.tools)
 - [x] Publisher portal with Google OAuth
 - [x] Publisher dashboard
+- [x] Publisher Earn Program (10% fee pool, monthly distributions, live leaderboard)
 
 ### Not Started
 - [ ] **Hosted Execution** - Serverless runtime so publishers don't need to host MCP endpoints
