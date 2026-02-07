@@ -16,8 +16,8 @@ export function About() {
     },
     {
       icon: Globe,
-      title: "Decentralized Payments",
-      description: "Smart contract-based settlement ensures publishers get paid instantly in USDC without intermediaries."
+      title: "Stablecoin Payments",
+      description: "Gasless USDC payments via the x402 protocol with a 20% platform fee. Publishers get paid directly to their wallet."
     },
     {
       icon: Zap,
@@ -40,12 +40,12 @@ export function About() {
             transition={{ duration: 0.5 }}
           >
             <h2 className="text-teal-400 font-semibold tracking-wide uppercase text-sm mb-3">About AgentStore</h2>
-            <h3 className="text-3xl sm:text-4xl font-bold text-white mb-6">The first decentralized marketplace for AI Agents</h3>
+            <h3 className="text-3xl sm:text-4xl font-bold text-white mb-6">The marketplace for Claude Code agents</h3>
             <p className="text-lg text-gray-400 mb-6">
-              AgentStore bridges the gap between AI developers and users. We provide a standardized platform for distributing, discovering, and monetizing Claude Code agents.
+              AgentStore is where Claude Code agents are bought, sold, and installed. Browse a growing catalog of MCP-backed agents, install them with a single command, and pay with gasless USDC via the x402 protocol.
             </p>
             <p className="text-lg text-gray-400">
-              By leveraging Ethereum for payments and MCP for communication, we're building an open ecosystem where intelligent agents can be shared and traded as easily as any other digital asset.
+              Whether you're a developer looking for tools to supercharge your workflow, or a builder ready to monetize your expertise, AgentStore makes it simple. Publish instantly, set your price, and earn directly to your Ethereum wallet.
             </p>
           </motion.div>
 

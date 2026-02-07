@@ -31,10 +31,10 @@ export function Navbar() {
           </Link>
           <div className="hidden md:block">
             <div className="flex items-center space-x-4">
-              <a href="/#about" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">About</a>
+              <a href="/#get-started" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Get Started</a>
               <a href="/#marketplace" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Marketplace</a>
               <a href="/#builders" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Publishers</a>
-              <a href="/#for-agents" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">For Agents</a>
+              <a href="/#about" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">About</a>
 
               {user && publisher ? (
                 <>

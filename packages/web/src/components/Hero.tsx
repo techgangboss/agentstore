@@ -41,7 +41,7 @@ export function Hero() {
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
             <button
-              onClick={() => scrollToSection('installation')}
+              onClick={() => scrollToSection('get-started')}
               className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-lg text-black bg-teal-400 hover:bg-teal-500 transition-all shadow-[0_0_20px_-5px_rgba(45,212,191,0.5)]"
             >
               Get Started
