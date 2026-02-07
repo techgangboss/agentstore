@@ -31,7 +31,7 @@ async function getAuthUser(request: NextRequest) {
   return user;
 }
 
-// GET /api/publishers/me - Get current publisher profile
+// GET /api/publishers/me - Get current publisher profile with real stats
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
   if (!user) {
@@ -50,22 +50,63 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Publisher not found' }, { status: 404 });
   }
 
-  // Get agent count
-  const { count: agentCount } = await adminSupabase
+  // Get agent count and IDs
+  const { data: agents } = await adminSupabase
     .from('agents')
-    .select('id', { count: 'exact', head: true })
+    .select('id')
     .eq('publisher_id', publisher.id);
 
-  // TODO: Get sales/earnings from transactions when implemented
+  const agentCount = agents?.length || 0;
+  const agentIds = agents?.map(a => a.id) || [];
+
+  let totalSales = 0;
+  let totalEarnings = 0;
+  let monthlyEarnings = 0;
+
+  if (agentIds.length > 0) {
+    // Get sales count and earnings from transactions via entitlements
+    const { data: entitlements } = await adminSupabase
+      .from('entitlements')
+      .select('id')
+      .in('agent_id', agentIds)
+      .eq('is_active', true)
+      .neq('confirmation_status', 'revoked');
+
+    totalSales = entitlements?.length || 0;
+
+    if (totalSales > 0) {
+      const entitlementIds = entitlements!.map(e => e.id);
+
+      // Total confirmed earnings
+      const { data: txTotals } = await adminSupabase
+        .from('transactions')
+        .select('publisher_amount, status, created_at')
+        .in('entitlement_id', entitlementIds)
+        .in('status', ['confirmed', 'pending']);
+
+      if (txTotals) {
+        totalEarnings = txTotals.reduce(
+          (sum, tx) => sum + (parseFloat(tx.publisher_amount) || 0),
+          0
+        );
+
+        // Monthly earnings (last 30 days)
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        monthlyEarnings = txTotals
+          .filter(tx => tx.created_at >= thirtyDaysAgo)
+          .reduce((sum, tx) => sum + (parseFloat(tx.publisher_amount) || 0), 0);
+      }
+    }
+  }
 
   return NextResponse.json({
     publisher: {
       ...publisher,
       stats: {
-        total_agents: agentCount || 0,
-        total_sales: 0,
-        total_earnings: 0,
-        monthly_earnings: 0,
+        total_agents: agentCount,
+        total_sales: totalSales,
+        total_earnings: totalEarnings,
+        monthly_earnings: monthlyEarnings,
       },
     },
   });

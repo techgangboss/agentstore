@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { z } from 'zod';
 import type { X402PaymentProof } from '@/lib/x402';
 import { PLATFORM_WALLET, PLATFORM_FEE_PERCENT } from '@/lib/x402';
+import { PRECONF_VERIFICATION_DEADLINE_MS } from '@/lib/payment-verification';
 
 // x402 facilitator endpoints
 const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || null;
@@ -40,7 +41,7 @@ const PaymentSubmissionSchema = z.object({
  * 2. Submit signed authorization here
  * 3. Server forwards to facilitator /verify then /settle
  * 4. Facilitator's relay wallet submits authorization to USDC on-chain
- * 5. USDC verifies signature and moves funds from user to payTo address
+ * 5. USDC verifies signature and moves funds directly from user to payTo address
  */
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -90,8 +91,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Check for existing active entitlement (prevent duplicate purchases)
+  const { data: existingEntitlement } = await supabase
+    .from('entitlements')
+    .select('id')
+    .eq('agent_id', agent.id)
+    .eq('wallet_address', wallet_address.toLowerCase())
+    .eq('is_active', true)
+    .single();
+
+  if (existingEntitlement) {
+    return NextResponse.json(
+      { error: 'Agent already purchased by this wallet' },
+      { status: 409 }
+    );
+  }
+
   // Calculate fee split: 20% platform, 80% publisher
-  const publisherWallet = agent.publisher?.wallet_address || payment_required.payTo;
+  const publisherWallet = agent.publisher?.payout_address || payment_required.payTo;
   const platformAmount = expectedAmount * (PLATFORM_FEE_PERCENT / 100);
   const publisherAmount = expectedAmount - platformAmount;
 
@@ -127,7 +144,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Step 2: Settle — facilitator's relay wallet submits to USDC on-chain
+      // Step 2: Settle - facilitator's relay wallet submits to USDC on-chain
       const settleResponse = await fetch(`${FACILITATOR_ENDPOINT}/settle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,19 +166,66 @@ export async function POST(request: NextRequest) {
 
       const proof: X402PaymentProof = await settleResponse.json();
 
-      // Settlement succeeded — create entitlement
+      // Settlement succeeded - create entitlement using agent UUID (not string agent_id)
+      const isPreconfirmed = proof.status !== 'confirmed';
+      const verificationDeadline = isPreconfirmed
+        ? new Date(Date.now() + PRECONF_VERIFICATION_DEADLINE_MS).toISOString()
+        : null;
+
       const entitlementToken = generateEntitlementToken();
-      await supabase.from('entitlements').insert({
-        agent_id,
-        wallet_address: wallet_address.toLowerCase(),
-        entitlement_token: entitlementToken,
-        pricing_model: 'one_time',
-        amount_paid: expectedAmount,
+      const { data: entitlement, error: entitlementError } = await supabase
+        .from('entitlements')
+        .insert({
+          agent_id: agent.id,
+          wallet_address: wallet_address.toLowerCase(),
+          entitlement_token: entitlementToken,
+          pricing_model: 'one_time',
+          amount_paid: expectedAmount,
+          currency: 'USDC',
+          is_active: true,
+          confirmation_status: proof.status === 'confirmed' ? 'confirmed' : 'preconfirmed',
+          verification_deadline: verificationDeadline,
+        })
+        .select()
+        .single();
+
+      if (entitlementError) {
+        console.error('Entitlement creation error:', entitlementError);
+        return NextResponse.json(
+          { error: 'Failed to create entitlement after payment' },
+          { status: 500 }
+        );
+      }
+
+      // Record transaction for earnings tracking and cron verification
+      const { error: txError } = await supabase.from('transactions').insert({
+        entitlement_id: entitlement.id,
+        tx_hash: proof.tx_hash.toLowerCase(),
+        from_address: wallet_address.toLowerCase(),
+        to_address: publisherWallet.toLowerCase(),
+        amount: expectedAmount,
         currency: 'USDC',
-        is_active: true,
-        confirmation_status: proof.status === 'confirmed' ? 'confirmed' : 'preconfirmed',
-        tx_hash: proof.tx_hash,
+        platform_fee: platformAmount,
+        publisher_amount: publisherAmount,
+        status: proof.status === 'confirmed' ? 'confirmed' : 'pending',
+        block_number: proof.block_number || null,
+        confirmations: proof.confirmations || 0,
       });
+
+      if (txError) {
+        // Check for duplicate tx_hash (replay protection)
+        if (txError.code === '23505') {
+          await supabase.from('entitlements').delete().eq('id', entitlement.id);
+          return NextResponse.json(
+            { error: 'Transaction already used for a purchase' },
+            { status: 409 }
+          );
+        }
+        console.error('Transaction record error:', txError);
+      }
+
+      // Increment download count
+      await supabase.rpc('increment_download_count', { agent_uuid: agent.id });
 
       return NextResponse.json({
         success: true,
@@ -179,7 +243,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Facilitator not configured — reject payment
+  // Facilitator not configured - reject payment
   return NextResponse.json(
     { error: 'Payment processing is not available. Facilitator not configured.' },
     { status: 503 }

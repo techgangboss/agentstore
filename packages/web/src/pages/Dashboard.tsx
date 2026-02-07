@@ -62,12 +62,33 @@ export function Dashboard() {
       const agentList = agents || [];
       const totalInstalls = agentList.reduce((sum: number, a: any) => sum + (a.download_count || 0), 0);
 
-      // Earnings come from transactions (query entitlements for real data)
+      // Fetch real earnings from publisher API
+      let totalSales = 0;
+      let totalEarnings = 0;
+
+      try {
+        const session = await supabase.auth.getSession();
+        const token = session.data.session?.access_token;
+        if (token) {
+          const apiUrl = import.meta.env.VITE_API_URL || '';
+          const meResponse = await fetch(`${apiUrl}/api/publishers/me`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (meResponse.ok) {
+            const meData = await meResponse.json();
+            totalSales = meData.publisher?.stats?.total_sales || 0;
+            totalEarnings = meData.publisher?.stats?.total_earnings || 0;
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching publisher stats:', e);
+      }
+
       setData({
         agents: agentList,
         totalInstalls,
-        totalSales: 0,
-        totalEarnings: 0,
+        totalSales,
+        totalEarnings,
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);

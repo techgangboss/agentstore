@@ -62,11 +62,11 @@ export async function GET(
     );
   }
 
-  // Check for existing valid entitlement
+  // Check for existing valid entitlement using agent UUID (not string agent_id)
   const { data: entitlement } = await supabase
     .from('entitlements')
     .select('*')
-    .eq('agent_id', agent_id)
+    .eq('agent_id', agent.id)
     .eq('wallet_address', walletAddress)
     .eq('is_active', true)
     .or('expires_at.is.null,expires_at.gt.now()')
@@ -95,7 +95,7 @@ export async function GET(
       const verified = await verifyPaymentProof(
         adminSupabase,
         paymentProof,
-        agent_id,
+        agent.id,
         walletAddress,
         pricing.amount
       );
@@ -160,7 +160,7 @@ async function verifyPaymentProof(
     facilitator_proof?: string;
     nonce?: string;
   },
-  agentId: string,
+  agentUuid: string,
   walletAddress: string,
   expectedAmount: number
 ): Promise<{
@@ -176,7 +176,7 @@ async function verifyPaymentProof(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           proof: proof.facilitator_proof,
-          agent_id: agentId,
+          agent_id: agentUuid,
           wallet_address: walletAddress,
           expected_amount: expectedAmount,
         }),
@@ -193,7 +193,7 @@ async function verifyPaymentProof(
           const entitlementToken = generateEntitlementToken();
 
           await supabase.from('entitlements').insert({
-            agent_id: agentId,
+            agent_id: agentUuid,
             wallet_address: walletAddress,
             entitlement_token: entitlementToken,
             pricing_model: 'one_time',
@@ -201,7 +201,6 @@ async function verifyPaymentProof(
             currency: 'USDC',
             is_active: true,
             confirmation_status: 'confirmed',
-            tx_hash: verification.tx_hash,
           });
 
           return {

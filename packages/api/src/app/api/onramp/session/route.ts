@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 // CDP Client Key (Project ID) - set in Vercel environment
-// This is the simple appId-based flow that works without server-side JWT
 const CDP_CLIENT_KEY = process.env.CDP_CLIENT_KEY;
 
 // Coinbase Onramp base URL
@@ -11,22 +10,24 @@ const ONRAMP_BASE_URL = 'https://pay.coinbase.com/buy/select-asset';
 const SessionRequestSchema = z.object({
   wallet_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   amount_usd: z.number().min(1).max(10000).optional(),
+  asset: z.enum(['ETH', 'USDC']).default('USDC'),
 });
 
-// Build the onramp URL with appId (simple flow - no session token needed)
+// Build the onramp URL with appId
 function buildOnrampUrl(
   appId: string,
   walletAddress: string,
+  asset: string,
   amountUsd?: number
 ): string {
   const params = new URLSearchParams({
     appId,
-    defaultAsset: 'ETH',
+    defaultAsset: asset,
     defaultNetwork: 'ethereum',
     addresses: JSON.stringify({
       [walletAddress]: ['ethereum'],
     }),
-    assets: JSON.stringify(['ETH']),
+    assets: JSON.stringify([asset]),
   });
 
   // Add preset amount if specified
@@ -48,8 +49,8 @@ export async function POST(request: NextRequest) {
         message: 'CDP client key not set. Contact support or fund wallet manually.',
         manual_instructions: {
           step1: 'Go to any exchange (Coinbase, Kraken, etc.)',
-          step2: 'Buy ETH with your credit card',
-          step3: 'Send ETH to your AgentStore wallet address',
+          step2: 'Buy USDC with your credit card',
+          step3: 'Send USDC to your AgentStore wallet address on Ethereum mainnet',
         },
       },
       { status: 503 }
@@ -72,21 +73,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { wallet_address, amount_usd } = parsed.data;
+  const { wallet_address, amount_usd, asset } = parsed.data;
 
   try {
     // Build the onramp URL with appId
-    const onrampUrl = buildOnrampUrl(CDP_CLIENT_KEY, wallet_address, amount_usd);
+    const onrampUrl = buildOnrampUrl(CDP_CLIENT_KEY, wallet_address, asset, amount_usd);
 
     return NextResponse.json({
       success: true,
       onramp_url: onrampUrl,
       wallet_address,
+      asset,
       amount_usd: amount_usd || null,
       instructions: [
         'Open the URL in your browser',
         'Complete the purchase with credit card or bank',
-        'ETH will be sent to your wallet within minutes',
+        `${asset} will be sent to your wallet within minutes`,
       ],
     });
   } catch (error) {
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
         fallback: {
           message: 'You can manually fund your wallet:',
           step1: 'Go to coinbase.com or any exchange',
-          step2: 'Buy ETH and send to your wallet address',
+          step2: `Buy ${asset} and send to your wallet address`,
           wallet_address,
         },
       },

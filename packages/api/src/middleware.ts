@@ -24,7 +24,7 @@ if (hasRedis) {
     prefix: 'agentstore:ratelimit:api',
   });
 
-  // Purchase endpoint: 10 requests per minute (stricter)
+  // Purchase/payment endpoint: 10 requests per minute (stricter)
   purchaseLimiter = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(10, '1 m'),
@@ -77,9 +77,21 @@ function getClientIP(request: NextRequest): string {
   return forwarded?.split(',')[0]?.trim() || realIP || 'unknown';
 }
 
+// CORS headers applied to all API responses
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Wallet-Address, X-Payment',
+};
+
 // Maximum request body sizes (in bytes)
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB for general API
 const MAX_AGENT_BODY_SIZE = 5 * 1024 * 1024; // 5MB for agent submissions (includes manifest)
+
+// Routes that use purchase rate limiting
+function isPaymentRoute(path: string): boolean {
+  return path.startsWith('/api/purchase') || path.startsWith('/api/payments/submit');
+}
 
 export async function middleware(request: NextRequest) {
   const ip = getClientIP(request);
@@ -95,16 +107,14 @@ export async function middleware(request: NextRequest) {
     return new NextResponse(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        ...CORS_HEADERS,
         'Access-Control-Max-Age': '86400',
       },
     });
   }
 
-  // Check request body size for POST/PUT requests
-  if (request.method === 'POST' || request.method === 'PUT') {
+  // Check request body size for POST/PUT/PATCH requests
+  if (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH') {
     const contentLength = request.headers.get('content-length');
     if (contentLength) {
       const size = parseInt(contentLength, 10);
@@ -118,25 +128,20 @@ export async function middleware(request: NextRequest) {
           }),
           {
             status: 413,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
           }
         );
       }
     }
   }
 
-  const isPurchase = path.startsWith('/api/purchase');
+  const isPayment = isPaymentRoute(path);
   const isRegistration = path === '/api/publishers' && request.method === 'POST';
 
   // Use Redis if available, otherwise fallback to memory
   if (hasRedis && generalLimiter && purchaseLimiter && registrationLimiter) {
-    const limiter = isRegistration ? registrationLimiter : isPurchase ? purchaseLimiter : generalLimiter;
+    const limiter = isRegistration ? registrationLimiter : isPayment ? purchaseLimiter : generalLimiter;
     const { success, limit, remaining, reset } = await limiter.limit(ip);
-
-    const headers = new Headers();
-    headers.set('X-RateLimit-Limit', limit.toString());
-    headers.set('X-RateLimit-Remaining', remaining.toString());
-    headers.set('X-RateLimit-Reset', Math.ceil(reset / 1000).toString());
 
     if (!success) {
       const resetIn = Math.max(0, reset - Date.now());
@@ -149,6 +154,7 @@ export async function middleware(request: NextRequest) {
           status: 429,
           headers: {
             'Content-Type': 'application/json',
+            ...CORS_HEADERS,
             'X-RateLimit-Limit': limit.toString(),
             'X-RateLimit-Remaining': '0',
             'X-RateLimit-Reset': Math.ceil(reset / 1000).toString(),
@@ -162,23 +168,22 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-RateLimit-Limit', limit.toString());
     response.headers.set('X-RateLimit-Remaining', remaining.toString());
     response.headers.set('X-RateLimit-Reset', Math.ceil(reset / 1000).toString());
+    // Add CORS headers to actual responses
+    for (const [key, value] of Object.entries(CORS_HEADERS)) {
+      response.headers.set(key, value);
+    }
     return response;
   }
 
   // Fallback to in-memory rate limiting
   const maxRequests = isRegistration
     ? MAX_REGISTRATION_REQUESTS
-    : isPurchase
+    : isPayment
       ? MAX_PURCHASE_REQUESTS
       : MAX_REQUESTS_PER_WINDOW;
   const windowMs = isRegistration ? REGISTRATION_WINDOW : RATE_LIMIT_WINDOW;
-  const rateLimitKey = isRegistration ? `register:${ip}` : isPurchase ? `purchase:${ip}` : `api:${ip}`;
+  const rateLimitKey = isRegistration ? `register:${ip}` : isPayment ? `purchase:${ip}` : `api:${ip}`;
   const { allowed, remaining, resetIn } = checkMemoryRateLimit(rateLimitKey, maxRequests, windowMs);
-
-  const headers = new Headers();
-  headers.set('X-RateLimit-Limit', maxRequests.toString());
-  headers.set('X-RateLimit-Remaining', remaining.toString());
-  headers.set('X-RateLimit-Reset', Math.ceil(resetIn / 1000).toString());
 
   if (!allowed) {
     return new NextResponse(
@@ -190,6 +195,7 @@ export async function middleware(request: NextRequest) {
         status: 429,
         headers: {
           'Content-Type': 'application/json',
+          ...CORS_HEADERS,
           'X-RateLimit-Limit': maxRequests.toString(),
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': Math.ceil(resetIn / 1000).toString(),
@@ -203,6 +209,10 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-RateLimit-Limit', maxRequests.toString());
   response.headers.set('X-RateLimit-Remaining', remaining.toString());
   response.headers.set('X-RateLimit-Reset', Math.ceil(resetIn / 1000).toString());
+  // Add CORS headers to actual responses
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
 
   return response;
 }

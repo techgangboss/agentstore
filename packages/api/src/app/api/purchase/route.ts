@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase';
 import { verifyPreconfirmation, usdToEth, PRECONF_VERIFICATION_DEADLINE_MS } from '@/lib/payment-verification';
+import { PLATFORM_FEE_PERCENT } from '@/lib/x402';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -10,7 +11,7 @@ const PurchaseSchema = z.object({
   tx_hash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
 });
 
-// POST /api/purchase - Purchase an agent with verified ETH payment
+// POST /api/purchase - Purchase an agent with verified ETH payment (legacy flow)
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
@@ -78,9 +79,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Note: Transaction uniqueness is enforced by DB constraint (tx_hash UNIQUE)
-  // We handle the race condition at insert time below
-
   // Get publisher payout address
   const publisherAddress = agent.publisher?.payout_address;
   if (!publisherAddress) {
@@ -106,13 +104,13 @@ export async function POST(request: NextRequest) {
   if (!verification.valid) {
     return NextResponse.json(
       { error: `Payment verification failed: ${verification.error}` },
-      { status: 402 } // Payment Required
+      { status: 402 }
     );
   }
 
-  // Calculate fees (10% platform fee)
+  // Calculate fees (20% platform fee, consistent with x402 flow)
   const amountPaid = parseFloat(verification.txDetails!.valueEth);
-  const platformFee = amountPaid * 0.1;
+  const platformFee = amountPaid * (PLATFORM_FEE_PERCENT / 100);
   const publisherAmount = amountPaid - platformFee;
 
   // Generate entitlement token
@@ -124,8 +122,7 @@ export async function POST(request: NextRequest) {
     ? new Date(Date.now() + PRECONF_VERIFICATION_DEADLINE_MS).toISOString()
     : null;
 
-  // Create entitlement with confirmation status (using admin client to bypass RLS)
-  // Preconfirmed entitlements get instant access but will be verified/revoked within 60s
+  // Create entitlement (using admin client to bypass RLS)
   const { data: entitlement, error: entitlementError } = await adminSupabase
     .from('entitlements')
     .insert({
@@ -150,8 +147,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Record transaction (using admin client to bypass RLS)
-  // This also serves as replay protection via UNIQUE constraint on tx_hash
+  // Record transaction (UNIQUE constraint on tx_hash provides replay protection)
   const blockNumber = verification.txDetails?.blockNumber
     ? Number(verification.txDetails.blockNumber)
     : null;
@@ -174,9 +170,8 @@ export async function POST(request: NextRequest) {
   });
 
   if (txError) {
-    // Check for unique constraint violation (race condition / replay attack)
+    // Check for unique constraint violation (replay attack)
     if (txError.code === '23505') {
-      // Rollback the entitlement we just created
       await adminSupabase.from('entitlements').delete().eq('id', entitlement.id);
       return NextResponse.json(
         { error: 'Transaction already used for a purchase' },
@@ -184,10 +179,9 @@ export async function POST(request: NextRequest) {
       );
     }
     console.error('Transaction record error:', txError);
-    // For other errors, don't fail the purchase, just log it
   }
 
-  // Increment download count atomically using RPC function
+  // Increment download count atomically
   await adminSupabase.rpc('increment_download_count', { agent_uuid: agent.id });
 
   return NextResponse.json({
