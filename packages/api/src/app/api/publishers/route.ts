@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { generateApiKey } from '@/lib/api-key';
 import { z } from 'zod';
 
@@ -110,6 +111,21 @@ export async function POST(request: NextRequest) {
   // Generate API key for programmatic access
   const { key: apiKey, hash: apiKeyHash } = generateApiKey();
 
+  // If a Bearer token is provided, link the Google/Supabase auth to this publisher
+  let authUserId: string | null = null;
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    const supabaseAuth = createSupabaseClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!
+    );
+    const { data: { user } } = await supabaseAuth.auth.getUser(token);
+    if (user) {
+      authUserId = user.id;
+    }
+  }
+
   // Create publisher
   const { data: publisher, error: createError } = await adminSupabase
     .from('publishers')
@@ -120,6 +136,7 @@ export async function POST(request: NextRequest) {
       email: email || null,
       support_url: support_url || null,
       api_key_hash: apiKeyHash,
+      ...(authUserId ? { auth_user_id: authUserId } : {}),
     })
     .select('publisher_id, display_name, payout_address, email, support_url, created_at')
     .single();
