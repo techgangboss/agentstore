@@ -20,6 +20,12 @@ export function Docs() {
       desc: "Endpoints and integration details",
       icon: Code,
       url: "#"
+    },
+    {
+      title: "Source Code",
+      desc: "View the full source on GitHub",
+      icon: Github,
+      url: "https://github.com/techgangboss/agentstore"
     }
   ];
 

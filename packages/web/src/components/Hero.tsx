@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Box } from 'lucide-react';
+import { ArrowRight, Box, Github } from 'lucide-react';
 import { motion } from 'motion/react';
 import { StatsBar } from './StatsBar';
 
@@ -55,6 +55,16 @@ export function Hero() {
             </button>
           </div>
           
+          <a
+            href="https://github.com/techgangboss/agentstore"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-300 transition-colors mb-8"
+          >
+            <Github className="w-4 h-4" />
+            Open source on GitHub
+          </a>
+
           <div className="max-w-4xl mx-auto">
              <StatsBar />
           </div>

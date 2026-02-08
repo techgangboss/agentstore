@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Terminal, Upload, LayoutDashboard, LogOut } from 'lucide-react';
+import { Terminal, Upload, LayoutDashboard, LogOut, Github } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   DropdownMenu,
@@ -36,6 +36,9 @@ export function Navbar() {
               <a href="/#builders" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Publishers</a>
               <a href="/#earn" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Earn</a>
               <a href="/#about" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">About</a>
+              <a href="https://github.com/techgangboss/agentstore" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white p-2 rounded-md transition-colors" aria-label="GitHub">
+                <Github className="w-5 h-5" />
+              </a>
 
               {user && publisher ? (
                 <>

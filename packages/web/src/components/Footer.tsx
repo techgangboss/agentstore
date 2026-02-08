@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal } from 'lucide-react';
+import { Terminal, Github } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -17,9 +17,13 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="flex gap-8">
+          <div className="flex items-center gap-8">
             <a href="#" className="text-gray-500 hover:text-white transition-colors text-sm">Docs</a>
             <a href="#" className="text-gray-500 hover:text-white transition-colors text-sm">Publishers</a>
+            <a href="https://github.com/techgangboss/agentstore" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-white transition-colors text-sm inline-flex items-center gap-1.5">
+              <Github className="w-4 h-4" />
+              GitHub
+            </a>
           </div>
 
           <div className="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs text-gray-400">
