@@ -22,6 +22,7 @@
   "rewrites": [
     { "source": "/robots.txt", "destination": "/robots.txt" },
     { "source": "/sitemap.xml", "destination": "/sitemap.xml" },
+    { "source": "/googlece427fe68cd7c48b.html", "destination": "/googlece427fe68cd7c48b.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
