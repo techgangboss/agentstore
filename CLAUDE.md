@@ -4,7 +4,7 @@
 
 AgentStore is an open-source marketplace for Claude Code plugins with gasless USDC payments via the x402 protocol.
 
-**One-liner:** Browse, pay, and install MCP-backed agents directly in Claude Code with gasless USDC payments.
+**One-liner:** The marketplace where agents and developers discover, install, and sell Claude Code plugins with stablecoin payouts and ranking rewards.
 
 ## Current Status: MVP Ready
 
@@ -78,6 +78,13 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 - `packages/api/src/app/api/agents/[agent_id]/access/route.ts` - Returns 402 for paid agents
 - `packages/api/src/app/api/payments/submit/route.ts` - Accept signed authorizations, forward to facilitator
 
+### Earn Program
+- `packages/api/src/app/api/cron/earn-distribution/route.ts` - Monthly cron: computes distributions + checks on-chain payouts
+- `packages/api/src/app/api/earn-program/route.ts` - Public leaderboard and program info
+- `packages/api/src/app/api/publishers/me/earn-program/route.ts` - Authenticated publisher earn stats
+- `packages/web/src/components/EarnProgram.tsx` - Landing page earn section with live leaderboard
+- `packages/web/src/components/publisher/EarnProgramCard.tsx` - Dashboard earn card with progress bar
+
 ### Infrastructure
 - `packages/cli/src/index.ts` - CLI commands
 - `packages/gateway/src/index.ts` - MCP server routing
@@ -122,13 +129,9 @@ The facilitator is a relay API (not a smart contract):
 - Integration tests for payment flows
 - Agent installation and publisher submission tests
 
-### Priority 2: Dashboard Analytics
-- Earnings charts, sales history
-- Payout tracking
-
-### Priority 3: Publisher Tools
+### Priority 2: Publisher Tools
 - Edit agents from dashboard
-- Revenue analytics
+- Earnings charts and sales history
 
 ## Development
 
@@ -154,3 +157,5 @@ Tables:
 - `entitlements` - Access tokens for paid agents
 - `transactions` - Payment records
 - `pending_payments` - Authorizations awaiting settlement
+- `earn_distributions` - Monthly earn pool cycles (period, pool amount, status)
+- `earn_distribution_shares` - Per-publisher shares (rank, earn_amount, payout_status, payout_tx_hash)
