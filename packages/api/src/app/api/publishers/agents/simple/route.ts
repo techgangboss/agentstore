@@ -4,19 +4,23 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyApiKey } from '@/lib/api-key';
 import { z } from 'zod';
 
-// Simplified agent schema - MCP endpoint is optional
+// Simplified agent schema - most fields optional with sensible defaults
+// Minimum required: publisher_id + name + description
 const SimpleAgentSchema = z.object({
-  agent_id: z.string().regex(/^[a-z0-9-]+\.[a-z0-9-]+$/, 'Format: publisher-id.agent-name'),
+  // publisher_id can be provided directly (auto-generates agent_id)
+  publisher_id: z.string().optional(),
+  // Or agent_id in publisher-id.agent-name format
+  agent_id: z.string().regex(/^[a-z0-9-]+\.[a-z0-9-]+$/, 'Format: publisher-id.agent-name').optional(),
   name: z.string().min(1).max(100),
-  type: z.enum(['open', 'proprietary']),
+  type: z.enum(['open', 'proprietary']).default('open'),
   description: z.string().min(10).max(1000),
   version: z.string().regex(/^\d+\.\d+\.\d+$/).default('1.0.0'),
   pricing: z.object({
     model: z.enum(['free', 'one_time']),
     currency: z.enum(['USD', 'USDC']).default('USD'),
     amount: z.number().min(0).default(0),
-  }),
-  tags: z.array(z.string()).max(5),
+  }).default({ model: 'free', currency: 'USD', amount: 0 }),
+  tags: z.array(z.string()).max(5).default([]),
   install: z.object({
     agent_wrapper: z.object({
       format: z.enum(['markdown']),
@@ -31,7 +35,7 @@ const SimpleAgentSchema = z.object({
         type: z.enum(['none', 'entitlement', 'api_key']),
       }),
     })).default([]),
-  }),
+  }).optional(),
   permissions: z.object({
     requires_network: z.boolean().default(false),
     requires_filesystem: z.boolean().default(false),
@@ -168,8 +172,22 @@ export async function POST(request: NextRequest) {
 
   const data = parsed.data;
 
+  // Resolve agent_id: either provided directly or auto-generated from publisher_id + name
+  if (!data.agent_id && !data.publisher_id) {
+    return NextResponse.json(
+      { error: 'Either agent_id or publisher_id is required' },
+      { status: 400 }
+    );
+  }
+
+  if (!data.agent_id && data.publisher_id) {
+    // Auto-generate agent_id from publisher_id + slugified name
+    const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    data.agent_id = `${data.publisher_id}.${slug}`;
+  }
+
   // Extract publisher_id from agent_id
-  const [publisherId] = data.agent_id.split('.');
+  const [publisherId] = data.agent_id!.split('.');
   if (!publisherId) {
     return NextResponse.json(
       { error: 'Invalid agent_id format. Must be: publisher-id.agent-name' },
@@ -186,7 +204,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Business rule: proprietary agents with MCP routes must use entitlement auth
-  if (data.type === 'proprietary' && data.install.gateway_routes.length > 0) {
+  if (data.type === 'proprietary' && data.install?.gateway_routes?.length && data.install.gateway_routes.length > 0) {
     const hasEntitlementAuth = data.install.gateway_routes.some(
       (r) => r.auth.type === 'entitlement'
     );
@@ -216,10 +234,19 @@ export async function POST(request: NextRequest) {
     .eq('agent_id', data.agent_id)
     .single();
 
-  // Build manifest
+  // Build manifest — default install if not provided
+  const install = data.install || {
+    agent_wrapper: {
+      format: 'markdown',
+      entrypoint: 'agent.md',
+      content: data.description,
+    },
+    gateway_routes: [],
+  };
+
   const manifest = {
     pricing: data.pricing,
-    install: data.install,
+    install,
     permissions: data.permissions,
     tags: data.tags,
   };

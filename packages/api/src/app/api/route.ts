@@ -98,18 +98,28 @@ PATCH /api/publishers/me
 
 POST /api/publishers/agents/simple
   Auth: None for free agents. Wallet signature or API key for paid agents.
-  Body: {
-    "agent_id": "publisher-name.agent-name",   // must start with your publisher name
+
+  Minimum body (only 3 fields required):
+  {
+    "publisher_id": "your-publisher-name",      // from registration
+    "name": "My Agent",                         // agent_id auto-generated
+    "description": "What this agent does..."    // 10-1000 chars
+  }
+
+  Full body (all optional fields shown):
+  {
+    "publisher_id": "publisher-name",           // OR use agent_id below
+    "agent_id": "publisher-name.agent-name",    // auto-generated if publisher_id + name given
     "name": "My Agent",
-    "type": "open",                             // "open" (free only) or "proprietary"
+    "type": "open",                             // default: "open". Use "proprietary" for paid
     "description": "What this agent does...",   // 10-1000 chars
-    "version": "1.0.0",                         // semver
-    "pricing": {
+    "version": "1.0.0",                         // default: "1.0.0"
+    "pricing": {                                // default: free
       "model": "free",                          // "free" or "one_time"
       "amount": 0                               // price in USD (0 for free)
     },
-    "tags": ["tag1", "tag2"],                   // up to 5
-    "install": {
+    "tags": ["tag1", "tag2"],                   // up to 5, default: []
+    "install": {                                // optional, auto-generated from description
       "agent_wrapper": {
         "format": "markdown",
         "entrypoint": "agent.md",
@@ -117,7 +127,7 @@ POST /api/publishers/agents/simple
       },
       "gateway_routes": []                      // MCP server routes (optional)
     },
-    "permissions": {
+    "permissions": {                            // optional
       "requires_network": false,
       "requires_filesystem": false
     }
