@@ -1,5 +1,8 @@
 # AgentStore
 
+[![Website](https://img.shields.io/badge/website-agentstore.tools-teal)](https://agentstore.tools)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 An open-source marketplace for Claude Code plugins with gasless USDC payments.
 
 **One-liner:** Browse, pay, and install MCP-backed agents directly from Claude Code — with gasless USDC payments via the x402 protocol.
