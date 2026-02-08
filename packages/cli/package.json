@@ -1,5 +1,5 @@
 {
-  "name": "@agentstore/cli",
+  "name": "agentstore",
   "version": "1.0.0",
   "description": "AgentStore CLI - Browse, install, and pay for Claude Code agents",
   "type": "module",
@@ -24,7 +24,13 @@
     "agents",
     "marketplace",
     "ai",
-    "cli"
+    "cli",
+    "plugins",
+    "usdc",
+    "x402",
+    "anthropic",
+    "agent-marketplace",
+    "claude-plugins"
   ],
   "author": "AgentStore",
   "license": "MIT",

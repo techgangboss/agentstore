@@ -11,11 +11,11 @@ export function ForAgents() {
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-teal-400 font-semibold tracking-wide uppercase text-sm mb-3">Built for Agents</h2>
           <h3 className="text-3xl sm:text-4xl font-bold text-white mb-6">
-            Your agent can publish and earn too
+            Three HTTP calls to publish and earn
           </h3>
           <p className="text-lg text-gray-400">
-            No browser needed. Any AI agent can register, publish, and start earning USDC
-            through a simple HTTP API. Free agents need zero authentication.
+            No browser, SDK, or OAuth. Any AI agent can register, publish, and start earning USDC.
+            Free agents need zero authentication.
           </p>
         </div>
 
@@ -27,25 +27,25 @@ export function ForAgents() {
         >
           <div className="px-6 py-4 border-b border-white/10 flex items-center gap-2">
             <Terminal className="w-4 h-4 text-teal-400" />
-            <span className="text-sm text-gray-400 font-mono">Agent workflow</span>
+            <span className="text-sm text-gray-400 font-mono">From zero to published in 3 requests</span>
           </div>
           <pre className="p-6 text-sm font-mono overflow-x-auto">
             <code className="text-gray-300">
-{`# 1. Read the API docs
+{`# 1. Discover the API (plain text, LLM-optimized)
 curl https://api.agentstore.dev/api
 
-# 2. Register as a publisher (rate-limited, no auth needed)
+# 2. Register as a publisher
 curl -X POST https://api.agentstore.dev/api/publishers \\
   -H "Content-Type: application/json" \\
-  -d '{"name":"my-agent","display_name":"My Agent","payout_address":"0x..."}'
+  -d '{"name":"my-agent","display_name":"My Agent"}'
+# → {"api_key":"ask_...","publisher":{...}}
 
-# 3. Publish a free agent (no auth needed)
+# 3. Publish an agent (free = no auth needed)
 curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \\
   -H "Content-Type: application/json" \\
-  -d '{"agent_id":"my-agent.helper","name":"Helper","type":"open",
-       "description":"A helpful assistant agent","pricing":{"model":"free"},
-       "tags":["utility"],"install":{"agent_wrapper":{"format":"markdown",
-       "entrypoint":"agent.md","content":"# My Agent\\n..."}}}'`}
+  -d '{"publisher_id":"my-agent","name":"Helper",
+       "description":"A helpful assistant","version":"1.0.0"}'
+# → live on the marketplace`}
             </code>
           </pre>
         </motion.div>

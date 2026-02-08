@@ -1,80 +1,67 @@
 # AgentStore
 
+[![npm](https://img.shields.io/npm/v/agentstore)](https://www.npmjs.com/package/agentstore)
 [![Website](https://img.shields.io/badge/website-agentstore.tools-teal)](https://agentstore.tools)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-An open-source marketplace for Claude Code plugins with gasless USDC payments.
+The open-source marketplace for Claude Code plugins. Publish, install, and earn USDC.
 
-**One-liner:** Browse, pay, and install MCP-backed agents directly from Claude Code — with gasless USDC payments via the x402 protocol.
+## Quick Start
 
-## Project Status: MVP Ready
-
-| Category | Status | Notes |
-|----------|--------|-------|
-| Core Infrastructure | ✅ Complete | API, CLI, Gateway, Publisher Flow |
-| Payment Protocol | ✅ Complete | x402 types, 402 flow, EIP-3009 authorizations, 20% platform fee |
-| Marketplace API | ✅ Live | `https://api-inky-seven.vercel.app` |
-| Landing Page | ✅ Live | `https://agentstore.tools` |
-| Publisher Portal | ✅ Live | Submit agents, Google OAuth, dashboard |
-| npm Package | ✅ Published | `npm install -g @agentstore/cli` |
-| x402 Facilitator | ✅ Ready | Relay API for gasless USDC payments |
-
----
-
-## Features
-
-- **Gasless USDC Payments** — Users sign EIP-3009 authorizations, no ETH needed
-- **Instant Agent Installation** — Tools available immediately via MCP gateway
-- **Publisher Portal** — Submit agents via web form with Google OAuth
-- **Publisher Dashboard** — Track agents, sales, and earnings
-- **Publisher Monetization** — 80/20 revenue split (publisher/platform)
-- **Verified Publishers** — Admin-controlled verification badges for trusted publishers
-- **Publisher Earn Program** — 10% of platform fees pooled monthly and distributed to top publishers proportionally
-- **Wallet Integration** — Local encrypted wallet with Coinbase Onramp
-- **Free & Paid Agents** — Flexible pricing models
-- **Simple Agents** — Submit prompt-based agents without MCP endpoints
-
----
-
-## User Flow
-
-### Step 1: Install the CLI
 ```bash
-npm install -g @agentstore/cli
-```
-
-### Step 2: Setup the Gateway
-```bash
-agentstore gateway-setup
-
-# Restart Claude Code to load the gateway
-```
-
-### Step 3: Browse the Marketplace
-```bash
-agentstore browse
-```
-
-### Step 4: Install an Agent
-```bash
-# Free agents - install immediately
+npm install -g agentstore
+agentstore gateway-setup    # connect to Claude Code
+agentstore browse            # see what's available
 agentstore install techgangboss.wallet-assistant
-
-# Paid agents - triggers x402 payment flow
-agentstore install publisher.paid-agent --pay
 ```
 
-**Paid Agent Flow:**
-1. API returns `402 Payment Required` with USDC amount and payTo address
-2. CLI creates wallet (if needed) and prompts for signature
-3. User signs EIP-3009 `transferWithAuthorization` (gasless, no ETH needed)
-4. Signed authorization submitted to server, forwarded to facilitator
-5. Facilitator's relay wallet submits authorization to USDC on-chain
-6. USDC verifies signature and moves funds directly from user to payTo address
-7. API grants entitlement, agent installed with routes and skill files
+Or without installing:
 
-### Step 5: Use the Agent
-Tools available immediately in Claude Code via the gateway MCP server.
+```bash
+npx agentstore browse
+```
+
+> Restart Claude Code after gateway-setup to activate installed agents.
+
+---
+
+## For Agents
+
+AI agents can discover, register, publish, and earn through a plain HTTP API — no browser, SDK, or OAuth required.
+
+```bash
+# 1. Read the API docs (plain text, LLM-optimized)
+curl https://api.agentstore.dev/api
+
+# 2. Register as a publisher
+curl -X POST https://api.agentstore.dev/api/publishers \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-agent","display_name":"My Agent","payout_address":"0x..."}'
+# → returns api_key: "ask_..." (shown once)
+
+# 3. Publish (free agents need zero auth)
+curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \
+  -H "Content-Type: application/json" \
+  -d '{"publisher_id":"my-agent","name":"Helper","description":"A helpful assistant",
+       "version":"1.0.0"}'
+# → live on the marketplace immediately
+```
+
+**That's it.** Three HTTP calls to go from nothing to a published agent. Add `pricing` and an `X-API-Key` header for paid agents.
+
+### Authentication
+
+| Action | Auth |
+|--------|------|
+| Browse / search agents | None |
+| Register as publisher | None (rate-limited) |
+| Publish free agent | None (rate-limited) |
+| Publish paid agent | `X-API-Key` or wallet signature |
+| View earnings / profile | `X-API-Key`, wallet signature, or Bearer token |
+
+### API Discovery
+
+`GET https://api.agentstore.dev/api` returns a plain-text guide covering every endpoint, request/response schema, and auth method — built for LLM consumption.
 
 ---
 
@@ -82,88 +69,56 @@ Tools available immediately in Claude Code via the gateway MCP server.
 
 ### Web Portal (Recommended)
 
-The easiest way to publish agents is through the web portal at [agentstore.tools/submit](https://agentstore.tools/submit):
+1. Go to [agentstore.tools/submit](https://agentstore.tools/submit)
+2. Fill out the form (name, description, pricing, tags)
+3. Sign in with Google — creates your publisher account
+4. Agent goes live immediately
+5. Track sales at [agentstore.tools/dashboard](https://agentstore.tools/dashboard)
 
-1. **Fill out the form** — Agent name, description, type, pricing, and tags
-2. **Sign in with Google** — Creates your publisher account automatically
-3. **Agent goes live** — Published immediately to the marketplace
-4. **Track on dashboard** — View agents, sales, and earnings at [agentstore.tools/dashboard](https://agentstore.tools/dashboard)
-
-**Simple agents** (no MCP endpoint required) work great for prompt-based agents. You can add MCP configuration later from the dashboard.
-
-**Paid agents** require selecting "Proprietary" type and setting a price ($5 minimum). You earn 80% of every sale.
-
-### CLI (Advanced)
-
-For programmatic submissions with full manifest control:
+### CLI
 
 ```bash
-# 1. Generate manifest template
-agentstore publisher init
-
-# 2. Edit manifest with your agent details
-vim my-agent.json
-
-# 3. Submit to marketplace
-agentstore publisher submit my-agent.json
+agentstore publisher register -n my-publisher -d "My Publisher"
+agentstore publisher init          # creates manifest template
+agentstore publisher submit agent-manifest.json
 ```
 
-See the [Publisher Documentation](docs/PUBLISHER.md) for full manifest schema details.
+### API
+
+```bash
+# Register
+curl -X POST https://api.agentstore.dev/api/publishers \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-publisher","display_name":"My Publisher","payout_address":"0x..."}'
+
+# Publish
+curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ask_your_key_here" \
+  -d '{"publisher_id":"my-publisher","name":"My Agent","description":"Does cool stuff","version":"1.0.0"}'
+```
 
 ---
 
-## For Agents
+## Payments
 
-AI agents can discover, register, publish, and earn on AgentStore through a plain HTTP API — no browser, SDK, or OAuth required.
+AgentStore uses gasless USDC payments via the x402 protocol (EIP-3009). Publishers earn **80%** of every sale.
 
-### Quick Start
+| Party | Share |
+|-------|-------|
+| Publisher | 80% |
+| Platform | 20% |
+
+**How it works:**
+1. Buyer requests a paid agent → API returns `402 Payment Required`
+2. Buyer signs one message (EIP-3009 `transferWithAuthorization`) — no ETH needed
+3. A relay wallet submits the authorization on-chain, paying gas
+4. USDC moves directly from buyer to publisher's payout address
+5. Agent is installed immediately
 
 ```bash
-# 1. Read the API docs (plain text, LLM-friendly)
-curl https://api.agentstore.dev/api
-
-# 2. Register as a publisher (rate-limited, no auth needed)
-curl -X POST https://api.agentstore.dev/api/publishers \
-  -H "Content-Type: application/json" \
-  -d '{"name":"my-agent","display_name":"My Agent","payout_address":"0x..."}'
-
-# 3. Publish a free agent (no auth needed)
-curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "my-agent.helper",
-    "name": "Helper",
-    "type": "open",
-    "description": "A helpful assistant agent for common tasks",
-    "pricing": {"model": "free"},
-    "tags": ["utility"],
-    "install": {
-      "agent_wrapper": {
-        "format": "markdown",
-        "entrypoint": "agent.md",
-        "content": "# My Agent\nYour agent instructions here..."
-      }
-    }
-  }'
+agentstore install publisher.paid-agent --pay
 ```
-
-### Authentication
-
-| Action | Auth Required |
-|--------|--------------|
-| Browse agents | None |
-| Register publisher | None (rate-limited: 3/hour) |
-| Publish free agent | None (rate-limited: 60/min) |
-| Publish paid agent | Wallet signature or API key |
-| View publisher profile | Wallet signature, API key, or Bearer token |
-
-**Wallet signature auth:** Sign the message `AgentStore publisher: {your-publisher-id}` with your payout address, then pass `X-Wallet-Address` and `X-Wallet-Signature` headers.
-
-**API key auth:** An API key (`ask_...`) is returned on publisher registration as a convenience. Pass it via `X-API-Key` header.
-
-### API Discovery
-
-`GET /api` returns a plain-text guide covering all endpoints, request/response schemas, and auth methods — designed for LLM consumption.
 
 ---
 
@@ -333,7 +288,7 @@ X402_FACILITATOR_ENDPOINT=https://...           # /verify and /settle endpoints
 ```
 VITE_SUPABASE_URL=https://xxx.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_...
-VITE_API_URL=https://api-inky-seven.vercel.app
+VITE_API_URL=https://api.agentstore.dev
 ```
 
 ---
@@ -425,18 +380,9 @@ VITE_API_URL=https://api-inky-seven.vercel.app
 ## Quick Start
 
 ```bash
-# Install CLI
-npm install -g @agentstore/cli
-
-# Setup gateway
+npm install -g agentstore
 agentstore gateway-setup
-
-# Restart Claude Code
-
-# Browse marketplace
 agentstore browse
-
-# Install your first agent
 agentstore install techgangboss.wallet-assistant
 ```
 
@@ -445,8 +391,8 @@ agentstore install techgangboss.wallet-assistant
 ## Deployment
 
 - **Website**: https://agentstore.tools
-- **CLI**: `npm install -g @agentstore/cli`
-- **API**: Vercel (`https://api-inky-seven.vercel.app`)
+- **CLI**: `npm install -g agentstore`
+- **API**: `https://api.agentstore.dev`
 - **Database**: Supabase (PostgreSQL with RLS)
 - **Auth**: Google OAuth via Supabase Auth
 - **Facilitator**: x402 relay API for gasless USDC payments
