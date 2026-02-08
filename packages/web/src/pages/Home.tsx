@@ -9,6 +9,10 @@ import { Docs } from '../components/Docs';
 import { Footer } from '../components/Footer';
 
 export function Home() {
+  React.useEffect(() => {
+    document.title = 'AgentStore - Claude Code Plugin Marketplace';
+  }, []);
+
   return (
     <>
       <Hero />

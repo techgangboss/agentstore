@@ -1,15 +1,61 @@
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>AgentStore Landing Page</title>
-    </head>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentStore - Claude Code Plugin Marketplace</title>
 
-    <body>
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-    </body>
-  </html>
+    <!-- SEO -->
+    <meta name="description" content="Discover, install, and sell Claude Code plugins. Browse AI agents, publish your own, and earn USDC payouts — all from your terminal." />
+    <meta name="keywords" content="claude code, ai agents, plugin marketplace, mcp, model context protocol, claude code plugins, ai tools, developer tools, usdc payments, x402" />
+    <meta name="author" content="AgentStore" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://agentstore.tools/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://agentstore.tools/" />
+    <meta property="og:title" content="AgentStore - Claude Code Plugin Marketplace" />
+    <meta property="og:description" content="Discover, install, and sell Claude Code plugins. Browse AI agents, publish your own, and earn USDC payouts." />
+    <meta property="og:site_name" content="AgentStore" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AgentStore - Claude Code Plugin Marketplace" />
+    <meta name="twitter:description" content="Discover, install, and sell Claude Code plugins. Browse AI agents, publish your own, and earn USDC payouts." />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "AgentStore",
+      "url": "https://agentstore.tools",
+      "description": "Open-source marketplace for Claude Code plugins with gasless USDC payments via the x402 protocol.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS, Linux, Windows",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Free to browse and install. Paid agents use USDC."
+      },
+      "creator": {
+        "@type": "Organization",
+        "name": "AgentStore"
+      }
+    }
+    </script>
+
+    <!-- Theme -->
+    <meta name="theme-color" content="#0a0a0a" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
   

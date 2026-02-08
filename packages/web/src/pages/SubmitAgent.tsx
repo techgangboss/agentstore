@@ -8,6 +8,10 @@ import { toast } from 'sonner';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 export function SubmitAgent() {
+  useEffect(() => {
+    document.title = 'Submit an Agent - AgentStore';
+  }, []);
+
   const navigate = useNavigate();
   const { user, publisher, loading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);

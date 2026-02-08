@@ -27,6 +27,10 @@ interface DashboardData {
 }
 
 export function Dashboard() {
+  useEffect(() => {
+    document.title = 'Publisher Dashboard - AgentStore';
+  }, []);
+
   const navigate = useNavigate();
   const { user, publisher, loading: authLoading, signOut, refreshPublisher } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);

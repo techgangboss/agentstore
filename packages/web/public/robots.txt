@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /auth/callback
+Disallow: /dashboard
+
+Sitemap: https://agentstore.tools/sitemap.xml
