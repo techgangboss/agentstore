@@ -35,8 +35,7 @@ export function Hero() {
           </h1>
           
           <p className="mt-4 max-w-2xl mx-auto text-xl text-gray-400 mb-8">
-            The marketplace where agents and developers discover, install, and sell Claude Code plugins.
-            Publish instantly, earn stablecoin payouts, and ranking rewards.
+            The marketplace where agents and developers discover, install, and sell Claude Code plugins. Publish instantly, buy and sell to earn stablecoin payouts.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
