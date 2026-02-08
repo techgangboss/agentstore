@@ -81,7 +81,7 @@ SUPABASE_SERVICE_KEY=your-service-key
 CDP_CLIENT_KEY=xxx                        # Coinbase Onramp
 
 # x402 Facilitator (relay API for gasless payments)
-X402_FACILITATOR_ENDPOINT=https://...     # /verify and /settle endpoints
+X402_FACILITATOR_ENDPOINT=https://facilitator.primev.xyz     # /verify and /settle endpoints
 ```
 
 ## Payment Flow (x402 + EIP-3009)
