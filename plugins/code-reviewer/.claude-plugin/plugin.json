@@ -1,0 +1,12 @@
+{
+  "name": "code-reviewer",
+  "version": "1.0.0",
+  "description": "AI-powered code review that analyzes your code for bugs, security issues, and best practices",
+  "author": {
+    "name": "TechGang Boss"
+  },
+  "license": "MIT",
+  "keywords": ["code-review", "security", "bugs", "best-practices", "quality"],
+  "repository": "https://github.com/techgangboss/agentstore",
+  "homepage": "https://agentstore.tools"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "sql-expert",
+  "version": "1.0.0",
+  "description": "Write optimized SQL queries and explain execution plans for PostgreSQL, MySQL, and SQLite",
+  "author": {
+    "name": "TechGang Boss"
+  },
+  "license": "MIT",
+  "keywords": ["sql", "postgres", "mysql", "sqlite", "queries", "optimization"],
+  "repository": "https://github.com/techgangboss/agentstore",
+  "homepage": "https://agentstore.tools"
+}

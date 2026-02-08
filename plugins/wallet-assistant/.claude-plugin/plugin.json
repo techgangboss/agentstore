@@ -1,0 +1,12 @@
+{
+  "name": "wallet-assistant",
+  "version": "1.0.0",
+  "description": "Check AgentStore wallet balances, view transaction history, and analyze spending patterns",
+  "author": {
+    "name": "TechGang Boss"
+  },
+  "license": "MIT",
+  "keywords": ["wallet", "usdc", "payments", "transactions", "balance"],
+  "repository": "https://github.com/techgangboss/agentstore",
+  "homepage": "https://agentstore.tools"
+}

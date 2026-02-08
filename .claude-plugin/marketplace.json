@@ -1,0 +1,60 @@
+{
+  "name": "agentstore",
+  "owner": {
+    "name": "AgentStore",
+    "email": "hello@agentstore.tools"
+  },
+  "metadata": {
+    "description": "Open-source marketplace for Claude Code plugins with gasless USDC payments via x402",
+    "version": "1.0.0",
+    "pluginRoot": "../plugins"
+  },
+  "plugins": [
+    {
+      "name": "agentstore",
+      "source": "../packages/plugin",
+      "description": "AgentStore marketplace CLI — browse, install, and manage Claude Code agents with USDC payments",
+      "version": "1.0.0",
+      "author": { "name": "AgentStore" },
+      "category": "marketplace",
+      "tags": ["marketplace", "plugins", "usdc", "x402"],
+      "keywords": ["agentstore", "marketplace", "browse", "install", "wallet", "payments"],
+      "license": "MIT",
+      "repository": "https://github.com/techgangboss/agentstore",
+      "homepage": "https://agentstore.tools"
+    },
+    {
+      "name": "wallet-assistant",
+      "source": "../plugins/wallet-assistant",
+      "description": "Check AgentStore wallet balances, view transaction history, and analyze spending patterns",
+      "version": "1.0.0",
+      "author": { "name": "TechGang Boss" },
+      "category": "finance",
+      "tags": ["wallet", "usdc", "payments", "transactions"],
+      "keywords": ["wallet", "balance", "transactions", "spending"],
+      "license": "MIT"
+    },
+    {
+      "name": "code-reviewer",
+      "source": "../plugins/code-reviewer",
+      "description": "AI-powered code review that analyzes your code for bugs, security issues, and best practices",
+      "version": "1.0.0",
+      "author": { "name": "TechGang Boss" },
+      "category": "code-quality",
+      "tags": ["review", "security", "best-practices", "bugs"],
+      "keywords": ["code-review", "security", "lint", "quality"],
+      "license": "MIT"
+    },
+    {
+      "name": "sql-expert",
+      "source": "../plugins/sql-expert",
+      "description": "Write optimized SQL queries and explain execution plans for PostgreSQL, MySQL, and SQLite",
+      "version": "1.0.0",
+      "author": { "name": "TechGang Boss" },
+      "category": "database",
+      "tags": ["sql", "database", "optimization", "queries"],
+      "keywords": ["sql", "postgres", "mysql", "sqlite", "queries"],
+      "license": "MIT"
+    }
+  ]
+}
