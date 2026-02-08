@@ -6,22 +6,31 @@
 
 The open-source marketplace for Claude Code plugins. Publish, install, and earn USDC.
 
-## Quick Start
+## Install
+
+The fastest way to get started — right inside Claude Code:
+
+```
+/plugin marketplace add techgangboss/agentstore
+```
+
+Then browse and install plugins natively:
+
+```
+/plugin install code-reviewer@agentstore
+/plugin install sql-expert@agentstore
+/plugin install wallet-assistant@agentstore
+```
+
+### CLI (for publishers and advanced features)
+
+The CLI adds wallet management, USDC payments, and publishing tools:
 
 ```bash
 npm install -g agentstore
-agentstore gateway-setup    # connect to Claude Code
-agentstore browse            # see what's available
+agentstore browse
 agentstore install techgangboss.wallet-assistant
 ```
-
-Or without installing:
-
-```bash
-npx agentstore browse
-```
-
-> Restart Claude Code after gateway-setup to activate installed agents.
 
 ---
 
@@ -255,6 +264,7 @@ AgentStore uses the x402 standard for gasless USDC payments on Ethereum mainnet 
 | `packages/common` | Shared types including x402 payment protocol. |
 | `packages/web` | React landing page, publisher portal, and dashboard. |
 | `packages/plugin` | Claude Code plugin with slash commands. |
+| `plugins/*` | Individual agent plugins installable via `/plugin install`. |
 
 ## Local Config Files
 
@@ -377,19 +387,9 @@ VITE_API_URL=https://api.agentstore.tools
 
 ---
 
-## Quick Start
-
-```bash
-npm install -g agentstore
-agentstore gateway-setup
-agentstore browse
-agentstore install techgangboss.wallet-assistant
-```
-
----
-
 ## Deployment
 
+- **Plugin Marketplace**: `/plugin marketplace add techgangboss/agentstore`
 - **Website**: https://agentstore.tools
 - **CLI**: `npm install -g agentstore`
 - **API**: `https://api.agentstore.tools`

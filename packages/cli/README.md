@@ -4,27 +4,19 @@ Open-source marketplace CLI for Claude Code plugins. Browse, install, publish, a
 
 ## Install
 
+**Native plugin** (recommended — no npm needed):
+
+```
+/plugin marketplace add techgangboss/agentstore
+/plugin install code-reviewer@agentstore
+```
+
+**npm CLI** (adds wallet, payments, and publishing):
+
 ```bash
 npm install -g agentstore
-```
-
-Or use directly:
-
-```bash
-npx agentstore browse
-```
-
-## Quick Start
-
-```bash
-# Browse available agents
 agentstore browse
-
-# Install a free agent
-agentstore install techgangboss.wallet-assistant
-
-# Setup the MCP gateway (routes agent tools through Claude Code)
-agentstore gateway-setup
+agentstore install techgangboss.code-reviewer
 ```
 
 ## For Publishers

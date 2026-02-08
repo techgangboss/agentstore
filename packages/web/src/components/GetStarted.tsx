@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Copy, Terminal, Bot, Coins } from 'lucide-react';
+import { Check, Copy, Terminal, Bot, Coins, Puzzle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const CodeBlock = ({ title, code, step }: { title: string; code: string; step: number }) => {
@@ -46,7 +46,7 @@ const CodeBlock = ({ title, code, step }: { title: string; code: string; step: n
 };
 
 export function GetStarted() {
-  const [activeTab, setActiveTab] = useState<'install' | 'agents'>('install');
+  const [activeTab, setActiveTab] = useState<'plugin' | 'cli' | 'agents'>('plugin');
 
   return (
     <section className="py-20 bg-black/20">
@@ -54,14 +54,24 @@ export function GetStarted() {
         <div className="flex justify-center mb-12">
           <div className="inline-flex bg-[#1a1a1a] rounded-xl border border-white/10 p-1">
             <button
-              onClick={() => setActiveTab('install')}
+              onClick={() => setActiveTab('plugin')}
               className={`px-6 py-3 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'install'
+                activeTab === 'plugin'
                   ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30'
                   : 'text-gray-400 hover:text-white border border-transparent'
               }`}
             >
-              Get Started
+              Plugin
+            </button>
+            <button
+              onClick={() => setActiveTab('cli')}
+              className={`px-6 py-3 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'cli'
+                  ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30'
+                  : 'text-gray-400 hover:text-white border border-transparent'
+              }`}
+            >
+              CLI
             </button>
             <button
               onClick={() => setActiveTab('agents')}
@@ -77,9 +87,9 @@ export function GetStarted() {
         </div>
 
         <AnimatePresence mode="wait">
-          {activeTab === 'install' && (
+          {activeTab === 'plugin' && (
             <motion.div
-              key="install"
+              key="plugin"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -87,14 +97,58 @@ export function GetStarted() {
               className="max-w-4xl mx-auto"
             >
               <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold text-white mb-4">Install in 60 seconds</h2>
-                <p className="text-gray-400">Get your gateway running and connect your first agent.</p>
+                <h2 className="text-3xl font-bold text-white mb-4">Install natively in Claude Code</h2>
+                <p className="text-gray-400">No npm needed. Add the marketplace and install plugins directly.</p>
+              </div>
+
+              <div className="space-y-6">
+                <CodeBlock step={1} title="Add the marketplace" code="/plugin marketplace add techgangboss/agentstore" />
+                <CodeBlock step={2} title="Install a plugin" code="/plugin install code-reviewer@agentstore" />
+              </div>
+
+              <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  { name: 'code-reviewer', desc: 'Bug detection, security scanning, best practices' },
+                  { name: 'sql-expert', desc: 'Write optimized queries, explain execution plans' },
+                  { name: 'wallet-assistant', desc: 'Check balances, transaction history, spending' },
+                ].map((agent, i) => (
+                  <div key={i} className="bg-[#1e1e1e] rounded-lg border border-white/10 p-4 hover:border-teal-500/30 transition-colors">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Puzzle className="w-4 h-4 text-teal-400" />
+                      <span className="text-sm font-medium text-white">{agent.name}</span>
+                    </div>
+                    <p className="text-xs text-gray-400">{agent.desc}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 p-4 rounded-lg bg-teal-900/10 border border-teal-500/20 flex items-start gap-3">
+                <Puzzle className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-teal-200/80">
+                  <strong className="text-teal-200">Native integration.</strong> Plugins appear in <code className="text-teal-400 bg-teal-500/10 px-1.5 py-0.5 rounded">/plugin</code> {'>'} Discover after adding the marketplace.
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'cli' && (
+            <motion.div
+              key="cli"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="max-w-4xl mx-auto"
+            >
+              <div className="text-center mb-12">
+                <h2 className="text-3xl font-bold text-white mb-4">Full CLI with payments and publishing</h2>
+                <p className="text-gray-400">Wallet management, USDC payments, and publisher tools.</p>
               </div>
 
               <div className="space-y-6">
                 <CodeBlock step={1} title="Install the CLI" code="npm install -g agentstore" />
-                <CodeBlock step={2} title="Setup the gateway" code="agentstore gateway-setup" />
-                <CodeBlock step={3} title="Install your first agent" code="agentstore install techgangboss.wallet-assistant" />
+                <CodeBlock step={2} title="Browse agents" code="agentstore browse" />
+                <CodeBlock step={3} title="Install an agent" code="agentstore install techgangboss.code-reviewer" />
               </div>
 
               <div className="mt-6 p-4 rounded-lg bg-[#1e1e1e] border border-white/10 flex items-start gap-3">
@@ -107,7 +161,7 @@ export function GetStarted() {
               <div className="mt-4 p-4 rounded-lg bg-teal-900/10 border border-teal-500/20 flex items-start gap-3">
                 <Terminal className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
                 <p className="text-sm text-teal-200/80">
-                  <strong className="text-teal-200">Pro Tip:</strong> Restart Claude Code after gateway-setup to activate your new agents.
+                  <strong className="text-teal-200">For publishers:</strong> The CLI includes wallet setup, USDC payments, and agent submission tools.
                 </p>
               </div>
             </motion.div>
