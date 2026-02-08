@@ -17,7 +17,7 @@ Search and browse available agents in the AgentStore marketplace.
 
 1. Use WebFetch to call the AgentStore API:
    ```
-   GET https://api-inky-seven.vercel.app/api/agents
+   GET https://api.agentstore.tools/api/agents
    ```
    Add query params if provided: `?search={query}&tag={category}`
 

@@ -15,14 +15,14 @@ Install an agent from the AgentStore marketplace using the CLI.
 Run the AgentStore CLI to install:
 
 ```bash
-node /Users/zion/agentstore/packages/cli/dist/index.js install {agent_id}
+agentstore install {agent_id}
 ```
 
 The CLI will:
 1. Fetch agent details from the marketplace API
 2. Display agent info (name, publisher, price, tools)
 3. For FREE agents: Install immediately
-4. For PAID agents: Prompt for wallet payment (not yet implemented in CLI)
+4. For PAID agents: Prompt for wallet payment
 5. Write gateway routes to `~/.agentstore/routes.json`
 6. Create skill file in `~/.claude/skills/agentstore/`
 
@@ -30,26 +30,26 @@ The CLI will:
 
 ```bash
 # Install the free wallet assistant
-node /Users/zion/agentstore/packages/cli/dist/index.js install techgangboss.wallet-assistant
+agentstore install techgangboss.wallet-assistant
 
 # Force reinstall/update
-node /Users/zion/agentstore/packages/cli/dist/index.js install techgangboss.wallet-assistant --yes
+agentstore install techgangboss.wallet-assistant --yes
 ```
 
 ## Other CLI Commands
 
 ```bash
 # List installed agents
-node /Users/zion/agentstore/packages/cli/dist/index.js list
+agentstore list
 
 # Uninstall an agent
-node /Users/zion/agentstore/packages/cli/dist/index.js uninstall {agent_id}
+agentstore uninstall {agent_id}
 
 # Show configuration
-node /Users/zion/agentstore/packages/cli/dist/index.js config
+agentstore config
 
 # Setup gateway in Claude's mcp.json
-node /Users/zion/agentstore/packages/cli/dist/index.js gateway-setup
+agentstore gateway-setup
 ```
 
 ## File Locations

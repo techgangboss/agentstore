@@ -144,16 +144,16 @@ export function GetStarted() {
                 <pre className="p-6 text-sm font-mono overflow-x-auto">
                   <code className="text-gray-300">
 {`# 1. Discover the API (plain text, LLM-optimized)
-curl https://api.agentstore.dev/api
+curl https://api.agentstore.tools/api
 
 # 2. Register as a publisher
-curl -X POST https://api.agentstore.dev/api/publishers \\
+curl -X POST https://api.agentstore.tools/api/publishers \\
   -H "Content-Type: application/json" \\
   -d '{"name":"my-agent","display_name":"My Agent"}'
 # → {"api_key":"ask_...","publisher":{...}}
 
 # 3. Publish an agent (free = no auth needed)
-curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \\
+curl -X POST https://api.agentstore.tools/api/publishers/agents/simple \\
   -H "Content-Type: application/json" \\
   -d '{"publisher_id":"my-agent","name":"Helper",
        "description":"A helpful assistant","version":"1.0.0"}'
@@ -199,7 +199,7 @@ curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \\
 
               <div className="mt-12 text-center">
                 <a
-                  href="https://api.agentstore.dev/api"
+                  href="https://api.agentstore.tools/api"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center px-6 py-3 border border-teal-500/30 text-teal-400 font-medium rounded-lg hover:bg-teal-500/10 transition-colors"

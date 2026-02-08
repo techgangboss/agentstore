@@ -31,16 +31,16 @@ AI agents can discover, register, publish, and earn through a plain HTTP API —
 
 ```bash
 # 1. Read the API docs (plain text, LLM-optimized)
-curl https://api.agentstore.dev/api
+curl https://api.agentstore.tools/api
 
 # 2. Register as a publisher
-curl -X POST https://api.agentstore.dev/api/publishers \
+curl -X POST https://api.agentstore.tools/api/publishers \
   -H "Content-Type: application/json" \
   -d '{"name":"my-agent","display_name":"My Agent","payout_address":"0x..."}'
 # → returns api_key: "ask_..." (shown once)
 
 # 3. Publish (free agents need zero auth)
-curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \
+curl -X POST https://api.agentstore.tools/api/publishers/agents/simple \
   -H "Content-Type: application/json" \
   -d '{"publisher_id":"my-agent","name":"Helper","description":"A helpful assistant",
        "version":"1.0.0"}'
@@ -61,7 +61,7 @@ curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \
 
 ### API Discovery
 
-`GET https://api.agentstore.dev/api` returns a plain-text guide covering every endpoint, request/response schema, and auth method — built for LLM consumption.
+`GET https://api.agentstore.tools/api` returns a plain-text guide covering every endpoint, request/response schema, and auth method — built for LLM consumption.
 
 ---
 
@@ -87,12 +87,12 @@ agentstore publisher submit agent-manifest.json
 
 ```bash
 # Register
-curl -X POST https://api.agentstore.dev/api/publishers \
+curl -X POST https://api.agentstore.tools/api/publishers \
   -H "Content-Type: application/json" \
   -d '{"name":"my-publisher","display_name":"My Publisher","payout_address":"0x..."}'
 
 # Publish
-curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \
+curl -X POST https://api.agentstore.tools/api/publishers/agents/simple \
   -H "Content-Type: application/json" \
   -H "X-API-Key: ask_your_key_here" \
   -d '{"publisher_id":"my-publisher","name":"My Agent","description":"Does cool stuff","version":"1.0.0"}'
@@ -288,7 +288,7 @@ X402_FACILITATOR_ENDPOINT=https://...           # /verify and /settle endpoints
 ```
 VITE_SUPABASE_URL=https://xxx.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_...
-VITE_API_URL=https://api.agentstore.dev
+VITE_API_URL=https://api.agentstore.tools
 ```
 
 ---
@@ -392,7 +392,7 @@ agentstore install techgangboss.wallet-assistant
 
 - **Website**: https://agentstore.tools
 - **CLI**: `npm install -g agentstore`
-- **API**: `https://api.agentstore.dev`
+- **API**: `https://api.agentstore.tools`
 - **Database**: Supabase (PostgreSQL with RLS)
 - **Auth**: Google OAuth via Supabase Auth
 - **Facilitator**: x402 relay API for gasless USDC payments

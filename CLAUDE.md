@@ -6,31 +6,6 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 
 **One-liner:** The marketplace where agents and developers discover, install, and sell Claude Code plugins with stablecoin payouts and ranking rewards.
 
-## Current Status: MVP Ready
-
-### Completed
-- [x] Marketplace API (browse, search, agent details)
-- [x] CLI (install, uninstall, browse, list, wallet, publisher)
-- [x] Gateway MCP server (tool routing, auth injection)
-- [x] Local wallet (AES-256-GCM encryption, OS keychain)
-- [x] Coinbase Onramp integration (fiat to crypto)
-- [x] x402 payment protocol types and interfaces
-- [x] 402 Payment Required API flow
-- [x] EIP-3009 transferWithAuthorization signing
-- [x] x402 facilitator integration (relay API)
-- [x] Publisher registration and agent submission
-- [x] 20% platform fee (80/20 split with publishers)
-- [x] Publisher verification system (admin-controlled badges)
-- [x] Landing page (https://agentstore.tools)
-- [x] Publisher portal with Google OAuth
-- [x] Publisher dashboard
-- [x] Publisher Earn Program (10% fee pool, monthly distributions, live leaderboard)
-
-### Not Started
-- [ ] **Hosted Execution** - Serverless runtime so publishers don't need to host MCP endpoints
-- [ ] Automated tests
-- [ ] npm publish
-
 ## Architecture
 
 ```
@@ -100,9 +75,9 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 
 ### API (Vercel)
 ```
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_KEY=eyJ...
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_KEY=your-service-key
 CDP_CLIENT_KEY=xxx                        # Coinbase Onramp
 
 # x402 Facilitator (relay API for gasless payments)
@@ -114,7 +89,7 @@ X402_FACILITATOR_ENDPOINT=https://...     # /verify and /settle endpoints
 The facilitator is a relay API (not a smart contract):
 1. Server returns 402 with price, payTo address, and x402 config
 2. User signs `transferWithAuthorization` (EIP-3009 typed data via EIP-712)
-3. Signed authorization sent to server → forwarded to facilitator /verify then /settle
+3. Signed authorization sent to server -> forwarded to facilitator /verify then /settle
 4. Facilitator's relay wallet submits the authorization to USDC on-chain, paying gas
 5. USDC verifies the user's signature and moves funds directly from user to payTo address
 
@@ -123,16 +98,6 @@ The facilitator is a relay API (not a smart contract):
 - Single signature UX (one EIP-712 typed data message)
 - Relay wallet pays gas, recoups from platform fee
 
-## Next Steps
-
-### Priority 1: E2E Testing
-- Integration tests for payment flows
-- Agent installation and publisher submission tests
-
-### Priority 2: Publisher Tools
-- Edit agents from dashboard
-- Earnings charts and sales history
-
 ## Development
 
 ```bash
@@ -140,16 +105,16 @@ The facilitator is a relay API (not a smart contract):
 npm install && npm run build
 
 # Run CLI
-node packages/cli/dist/index.js browse
-node packages/cli/dist/index.js install techgangboss.wallet-assistant
+agentstore browse
+agentstore install techgangboss.wallet-assistant
 
 # Setup gateway
-node packages/cli/dist/index.js gateway-setup
+agentstore gateway-setup
 ```
 
 ## Database
 
-Supabase project: `pqjntpkfdcfsvnnjkbny`
+Uses Supabase (PostgreSQL with RLS).
 
 Tables:
 - `publishers` - Publisher profiles and payout addresses

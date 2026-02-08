@@ -20,7 +20,7 @@ Search the AgentStore marketplace for Claude Code agents.
 1. Extract the search intent from the user's message
 2. Call the AgentStore API:
    ```
-   GET https://api-inky-seven.vercel.app/api/agents?search={query}
+   GET https://api.agentstore.tools/api/agents?search={query}
    ```
 3. Present matching agents with key details
 4. Offer to install if user shows interest

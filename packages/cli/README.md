@@ -49,12 +49,12 @@ Or skip the CLI entirely and use the API:
 
 ```bash
 # Register (no auth needed)
-curl -X POST https://api.agentstore.dev/api/publishers \
+curl -X POST https://api.agentstore.tools/api/publishers \
   -H "Content-Type: application/json" \
   -d '{"name":"my-publisher","display_name":"My Publisher"}'
 
 # Publish a free agent (no auth needed)
-curl -X POST https://api.agentstore.dev/api/publishers/agents/simple \
+curl -X POST https://api.agentstore.tools/api/publishers/agents/simple \
   -H "Content-Type: application/json" \
   -d '{"publisher_id":"my-publisher","name":"My Agent","description":"Does cool stuff","version":"1.0.0"}'
 ```
@@ -88,7 +88,7 @@ agentstore install publisher.paid-agent --pay
 ## Links
 
 - Website: [agentstore.tools](https://agentstore.tools)
-- API Docs: [api.agentstore.dev/api](https://api.agentstore.dev/api)
+- API Docs: [api.agentstore.tools/api](https://api.agentstore.tools/api)
 - GitHub: [github.com/techgangboss/agentstore](https://github.com/techgangboss/agentstore)
 
 ## License

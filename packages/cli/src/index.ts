@@ -24,7 +24,7 @@ import * as keytar from 'keytar';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const API_BASE = 'https://api.agentstore.dev';
+const API_BASE = 'https://api.agentstore.tools';
 const MEV_COMMIT_RPC = 'https://fastrpc.mev-commit.xyz';
 const KEYCHAIN_SERVICE = 'agentstore-wallet';
 const KEYCHAIN_ACCOUNT = 'encryption-key';

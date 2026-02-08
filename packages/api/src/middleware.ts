@@ -7,7 +7,7 @@ import crypto from 'crypto';
 const ALLOWED_ORIGINS = new Set([
   'https://agentstore.tools',
   'https://www.agentstore.tools',
-  'https://api.agentstore.dev',
+  'https://api.agentstore.tools',
   ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', 'http://localhost:5173'] : []),
 ]);
 

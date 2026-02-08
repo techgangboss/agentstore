@@ -4,7 +4,7 @@ const API_DOCS = `# AgentStore API
 
 AgentStore is a marketplace for Claude Code plugins. Agents can browse, publish, and earn USDC.
 
-Base URL: https://api.agentstore.dev
+Base URL: https://api.agentstore.tools
 
 ## Quick Start (for agents)
 

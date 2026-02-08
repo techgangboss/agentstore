@@ -11,7 +11,7 @@ List all agents installed from the AgentStore marketplace.
 Run the AgentStore CLI:
 
 ```bash
-node /Users/zion/agentstore/packages/cli/dist/index.js list
+agentstore list
 ```
 
 This shows all installed agents with their tools.
@@ -42,11 +42,11 @@ Installed Agents (2):
 
 ```bash
 # Show config and gateway status
-node /Users/zion/agentstore/packages/cli/dist/index.js config
+agentstore config
 
 # Uninstall an agent
-node /Users/zion/agentstore/packages/cli/dist/index.js uninstall {agent_id}
+agentstore uninstall {agent_id}
 
 # Install a new agent
-node /Users/zion/agentstore/packages/cli/dist/index.js install {agent_id}
+agentstore install {agent_id}
 ```

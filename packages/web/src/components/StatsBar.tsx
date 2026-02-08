@@ -17,7 +17,7 @@ export function StatsBar() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('https://api-inky-seven.vercel.app/api/agents');
+        const response = await fetch('https://api.agentstore.tools/api/agents');
         if (response.ok) {
           const data = await response.json();
           // Ensure data is an array

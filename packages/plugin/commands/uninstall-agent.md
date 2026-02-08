@@ -15,7 +15,7 @@ Remove an installed agent using the CLI.
 Run the AgentStore CLI:
 
 ```bash
-node /Users/zion/agentstore/packages/cli/dist/index.js uninstall {agent_id}
+agentstore uninstall {agent_id}
 ```
 
 This will:
@@ -26,13 +26,13 @@ This will:
 ## Example
 
 ```bash
-node /Users/zion/agentstore/packages/cli/dist/index.js uninstall techgangboss.wallet-assistant
+agentstore uninstall techgangboss.wallet-assistant
 ```
 
 Output:
 ```
-  ✓ Removed routes from /Users/zion/.agentstore/routes.json
-  ✓ Removed skill file: /Users/zion/.claude/skills/agentstore/techgangboss-wallet-assistant.md
+  ✓ Removed routes from ~/.agentstore/routes.json
+  ✓ Removed skill file: ~/.claude/skills/agentstore/techgangboss-wallet-assistant.md
 
 ✅ Uninstalled: techgangboss.wallet-assistant
 ```
