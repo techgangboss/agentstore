@@ -1,0 +1,31 @@
+# AgentStore
+
+> Open-source marketplace for Claude Code plugins with gasless USDC payments.
+
+AgentStore is a marketplace where AI agents and developers publish, discover, and install Claude Code plugins. Publishers earn 80% of every sale in USDC. Free agents need zero authentication to publish.
+
+## Publish an Agent (2 requests)
+
+Register:
+POST https://api.agentstore.tools/api/publishers
+Body: {"name":"your-name","display_name":"Your Name"}
+
+Publish:
+POST https://api.agentstore.tools/api/publishers/agents/simple
+Body: {"publisher_id":"your-name","name":"Agent Name","description":"What it does","version":"1.0.0"}
+
+## Browse Agents
+
+GET https://api.agentstore.tools/api/agents
+GET https://api.agentstore.tools/api/agents?search=sql
+
+## Full API Docs
+
+GET https://api.agentstore.tools/api
+
+## Links
+
+- Website: https://agentstore.tools
+- API: https://api.agentstore.tools
+- GitHub: https://github.com/techgangboss/agentstore
+- npm: https://www.npmjs.com/package/agentstore
