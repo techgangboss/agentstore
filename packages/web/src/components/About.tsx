@@ -1,14 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ShieldCheck, Cpu, Globe, Zap, Trophy } from 'lucide-react';
+import { Cpu, Globe, Zap, Trophy } from 'lucide-react';
 
 export function About() {
   const features = [
-    {
-      icon: ShieldCheck,
-      title: "Secure & Verified",
-      description: "Every agent is verified for security and performance before being listed on the marketplace."
-    },
     {
       icon: Cpu,
       title: "Native Integration",
