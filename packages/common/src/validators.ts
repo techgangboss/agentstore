@@ -35,7 +35,7 @@ export const SlugSchema = z
 
 // Pricing schemas
 export const PricingModelSchema = z.enum(['free', 'one_time', 'subscription', 'usage_based']);
-export const CurrencySchema = z.enum(['USD', 'ETH', 'USDC']);
+export const CurrencySchema = z.enum(['USD', 'USDC']);
 
 export const PricingSchema = z.object({
   model: PricingModelSchema,

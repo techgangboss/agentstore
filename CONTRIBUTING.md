@@ -41,7 +41,7 @@ Add `"payout_address":"0x..."` when registering and set pricing on your agent. P
 | `packages/web` | React landing page + publisher dashboard |
 | `packages/cli` | CLI for browsing, installing, publishing |
 | `packages/gateway` | Local MCP server routing |
-| `packages/wallet` | Encrypted Ethereum wallet |
+| `packages/common` | Shared types including x402 payment protocol |
 
 ### Areas We Need Help
 

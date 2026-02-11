@@ -1,6 +1,6 @@
 {
   "name": "agentstore",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "AgentStore CLI - Browse, install, and pay for Claude Code agents",
   "type": "module",
   "main": "dist/index.js",

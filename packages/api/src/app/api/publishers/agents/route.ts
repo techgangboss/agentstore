@@ -32,7 +32,7 @@ const AgentWrapperSchema = z.object({
 
 const PricingSchema = z.object({
   model: z.enum(['free', 'one_time', 'subscription', 'usage_based']),
-  currency: z.enum(['USD', 'ETH']).default('USD'),
+  currency: z.enum(['USD', 'USDC']).default('USD'),
   amount: z.number().min(0).default(0),
   amount_usd: z.number().min(0).optional(),
 });

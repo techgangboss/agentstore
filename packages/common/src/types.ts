@@ -29,7 +29,7 @@ export interface Agent {
 export interface AgentManifestJson {
   pricing: {
     model: 'free' | 'one_time' | 'subscription' | 'usage_based';
-    currency: 'USD' | 'ETH' | 'USDC';
+    currency: 'USD' | 'USDC';
     amount: number;
     amount_usd?: number;
   };
@@ -145,11 +145,12 @@ export interface PurchaseResponse {
   entitlement_token: string;
   expires_at: string | null;
   confirmation_status: 'preconfirmed' | 'confirmed';
-  payment: {
-    amount_eth: number;
+  proof: {
     tx_hash: string;
-    status: 'preconfirmed' | 'confirmed';
-    confirmations: string;
+    amount: string;
+    currency: 'USDC';
+    status: 'pending' | 'preconfirmed' | 'confirmed';
+    confirmations: number;
   };
   install: AgentManifestJson['install'] | null;
 }

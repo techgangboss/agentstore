@@ -45,7 +45,7 @@ export function About() {
               AgentStore is where Claude Code agents are bought, sold, and installed. Browse a growing catalog of MCP-backed agents, install them with a single command, and pay with gasless USDC via the x402 protocol.
             </p>
             <p className="text-lg text-gray-400">
-              Whether you're a developer looking for tools to supercharge your workflow, or a builder ready to monetize your expertise, AgentStore makes it simple. Publish instantly, set your price, and earn directly to your Ethereum wallet.
+              Whether you're a developer looking for tools to supercharge your workflow, or a builder ready to monetize your expertise, AgentStore makes it simple. Publish instantly, set your price, and earn USDC directly to your wallet.
             </p>
           </motion.div>
 

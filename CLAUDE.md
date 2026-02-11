@@ -61,9 +61,8 @@ AgentStore is an open-source marketplace for Claude Code plugins with gasless US
 - `packages/web/src/components/publisher/EarnProgramCard.tsx` - Dashboard earn card with progress bar
 
 ### Infrastructure
-- `packages/cli/src/index.ts` - CLI commands
+- `packages/cli/src/index.ts` - CLI commands (x402 USDC payment flow)
 - `packages/gateway/src/index.ts` - MCP server routing
-- `packages/wallet/src/index.ts` - Local wallet management
 
 ### Configuration
 - `~/.agentstore/routes.json` - Installed agent routes

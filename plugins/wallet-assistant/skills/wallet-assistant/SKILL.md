@@ -12,7 +12,7 @@ Provides insights into your AgentStore wallet including balances, transaction hi
 
 ## Capabilities
 
-- Check ETH and USDC balances
+- Check USDC balance on Ethereum mainnet
 - View transaction history with details
 - Analyze spending patterns over time
 - Check payment status for agent purchases
@@ -25,8 +25,8 @@ Provides insights into your AgentStore wallet including balances, transaction hi
 Read the wallet configuration from `~/.agentstore/wallet.json` to get the wallet address, then query balances:
 
 1. Read `~/.agentstore/wallet.json` for the wallet address
-2. Use the wallet address to check on-chain balances
-3. Report ETH balance (for gas) and USDC balance (for agent purchases)
+2. Use the wallet address to check USDC balance (ERC-20 on Ethereum mainnet)
+3. Report USDC balance (used for agent purchases via gasless x402 payments)
 
 ### Transaction History
 
@@ -52,7 +52,6 @@ When asked about spending patterns:
 Check `~/.agentstore/wallet.json`, read the address, and report:
 - Wallet address: 0x...
 - USDC balance: $X.XX
-- ETH balance: X.XXXX ETH
 
 **User:** "Show my purchase history"
 

@@ -160,7 +160,6 @@ On top of the 80% revenue share, publishers earn **bonus USDC** from a monthly p
 | `packages/web` | React landing page, publisher portal, and dashboard |
 | `packages/cli` | CLI for browsing, installing, and managing agents |
 | `packages/gateway` | Local MCP server routing tool calls to publishers |
-| `packages/wallet` | Local Ethereum wallet with AES-256-GCM encryption |
 | `packages/common` | Shared types including x402 payment protocol |
 | `packages/plugin` | Claude Code plugin with slash commands |
 

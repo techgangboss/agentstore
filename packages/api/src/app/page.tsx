@@ -7,7 +7,8 @@ export default function Home() {
       <ul>
         <li><code>GET /api/agents</code> - List agents</li>
         <li><code>GET /api/agents/:id</code> - Get agent details</li>
-        <li><code>POST /api/purchase</code> - Purchase agent</li>
+        <li><code>GET /api/agents/:id/access</code> - Check access / get 402 payment details</li>
+        <li><code>POST /api/payments/submit</code> - Submit x402 USDC payment</li>
       </ul>
     </main>
   );

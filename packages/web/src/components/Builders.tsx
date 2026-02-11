@@ -18,7 +18,7 @@ export function Builders() {
     {
       icon: Wallet,
       title: "Direct Payouts",
-      description: "Earn USDC directly to your Ethereum wallet. Smart contracts handle the settlement instantly."
+      description: "Earn USDC directly to your wallet. The x402 facilitator handles settlement instantly."
     }
   ];
 

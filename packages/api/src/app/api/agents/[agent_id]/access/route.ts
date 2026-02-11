@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase';
-import { createPaymentRequired, PLATFORM_WALLET, PLATFORM_FEE_PERCENT } from '@/lib/x402';
+import { createPaymentRequired, PLATFORM_WALLET, PLATFORM_FEE_PERCENT, calculateFeeSplit } from '@/lib/x402';
 
 // x402 facilitator endpoint
 const FACILITATOR_ENDPOINT = process.env.X402_FACILITATOR_ENDPOINT || '';
@@ -203,8 +203,7 @@ async function verifyPaymentProof(
           }
 
           const entitlementToken = generateEntitlementToken();
-          const platformAmount = expectedAmount * (PLATFORM_FEE_PERCENT / 100);
-          const publisherAmount = expectedAmount - platformAmount;
+          const { platformAmountNum: platformAmount, publisherAmountNum: publisherAmount } = calculateFeeSplit(expectedAmount);
 
           const { data: entitlement, error: entitlementError } = await supabase.from('entitlements').insert({
             agent_id: agentUuid,

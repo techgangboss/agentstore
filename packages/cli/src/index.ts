@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const API_BASE = 'https://api.agentstore.tools';
-const MEV_COMMIT_RPC = 'https://fastrpc.mev-commit.xyz';
+const ETHEREUM_RPC = 'https://ethereum-rpc.publicnode.com';
 const KEYCHAIN_SERVICE = 'agentstore-wallet';
 const KEYCHAIN_ACCOUNT = 'encryption-key';
 
@@ -69,7 +69,7 @@ const TX_HISTORY_FILE = path.join(AGENTSTORE_DIR, 'tx_history.json');
 // Create public client for reading blockchain state
 const publicClient = createPublicClient({
   chain: mainnet,
-  transport: http(MEV_COMMIT_RPC),
+  transport: http(ETHEREUM_RPC),
 });
 
 // Types
@@ -118,43 +118,6 @@ interface Entitlement {
   agentId: string;
   token: string;
   expiresAt: string | null;
-}
-
-interface AgentManifest {
-  agent_id: string;
-  name: string;
-  type: 'open' | 'proprietary';
-  description: string;
-  version: string;
-  publisher: {
-    publisher_id: string;
-    display_name: string;
-  };
-  pricing: {
-    model: string;
-    amount?: number;
-    amount_usd?: number;
-    currency?: string;
-  };
-  install: {
-    gateway_routes: Array<{
-      route_id: string;
-      mcp_endpoint: string;
-      tools: Array<{
-        name: string;
-        description: string;
-        inputSchema: Record<string, unknown>;
-      }>;
-      auth: {
-        type: string;
-      };
-    }>;
-  };
-  permissions: {
-    requires_network: boolean;
-    requires_filesystem: boolean;
-    notes?: string;
-  };
 }
 
 // API returns flat structure (manifest fields at top level)
@@ -375,7 +338,7 @@ async function createNewWallet(): Promise<{ address: string }> {
     address: account.address,
     createdAt: new Date().toISOString(),
     network: 'mainnet',
-    rpcEndpoint: MEV_COMMIT_RPC,
+    rpcEndpoint: ETHEREUM_RPC,
     spendLimits: {
       perTransaction: 100,
       daily: 500,
@@ -410,7 +373,7 @@ async function ensureWalletExists(): Promise<{ address: string; created: boolean
     address: account.address,
     createdAt: new Date().toISOString(),
     network: 'mainnet',
-    rpcEndpoint: MEV_COMMIT_RPC,
+    rpcEndpoint: ETHEREUM_RPC,
     spendLimits: {
       perTransaction: 100,
       daily: 500,
@@ -614,6 +577,40 @@ function prompt(question: string): Promise<string> {
   });
 }
 
+// Prompt for secret input (masked)
+function promptSecret(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    process.stdout.write(question);
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode?.(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+    let input = '';
+    const onData = (ch: string) => {
+      if (ch === '\n' || ch === '\r') {
+        stdin.setRawMode?.(wasRaw ?? false);
+        stdin.pause();
+        stdin.removeListener('data', onData);
+        process.stdout.write('\n');
+        resolve(input);
+      } else if (ch === '\u0003') {
+        // Ctrl+C
+        process.exit(0);
+      } else if (ch === '\u007f' || ch === '\b') {
+        if (input.length > 0) {
+          input = input.slice(0, -1);
+          process.stdout.write('\b \b');
+        }
+      } else {
+        input += ch;
+        process.stdout.write('*');
+      }
+    };
+    stdin.on('data', onData);
+  });
+}
+
 // x402 Payment Required response shape
 interface PaymentRequiredResponse {
   amount: string;
@@ -762,6 +759,18 @@ async function submitX402Payment(
 
     if (!response.ok) {
       const error = await response.json() as { error?: string };
+      if (response.status === 409) {
+        // Already purchased — re-check /access for the entitlement
+        console.log('Agent already purchased. Retrieving entitlement...');
+        const access = await getPaymentRequired(agentId, walletAddress);
+        if (access.status === 'granted' && access.entitlement) {
+          return {
+            entitlement_token: access.entitlement.token,
+            install: access.install,
+            proof: null,
+          };
+        }
+      }
       console.error(`Payment failed: ${error.error || response.statusText}`);
       return null;
     }
@@ -858,6 +867,9 @@ This is a prompt-based agent. Reference it by asking Claude to follow the instru
 
 // Install command
 async function installAgent(agentId: string, options: { yes?: boolean; pay?: boolean }): Promise<void> {
+  // --pay is a true alias for --yes
+  if (options.pay) options.yes = true;
+
   ensureDirectories();
 
   console.log(`Fetching agent: ${agentId}...`);
@@ -915,19 +927,42 @@ async function installAgent(agentId: string, options: { yes?: boolean; pay?: boo
     console.log(`   Price: $${priceUsd.toFixed(2)} USDC`);
     console.log(`   Your wallet: ${walletAddress}`);
 
-    // Check access status (entitlement or 402)
-    const accessResult = await getPaymentRequired(agent.agent_id, walletAddress);
-
-    if (accessResult.status === 'error') {
-      console.log(`\n❌ Access check failed: ${accessResult.error}`);
-      process.exit(1);
+    // Check local entitlements first (skip API call if already purchased)
+    const localEntitlements = loadEntitlements();
+    const localEntitlement = localEntitlements.find((e) => e.agentId === agent.agent_id);
+    if (localEntitlement) {
+      console.log('\n✓ Already purchased! Using existing entitlement.');
+      entitlementToken = localEntitlement.token;
+      expiresAt = localEntitlement.expiresAt;
     }
 
-    if (accessResult.status === 'granted' && accessResult.entitlement) {
-      console.log('\n✓ Already purchased! Using existing entitlement.');
-      entitlementToken = accessResult.entitlement.token;
-      expiresAt = accessResult.entitlement.expires_at;
-    } else if (accessResult.status === 'payment_required') {
+    // If no local entitlement, check server
+    if (!entitlementToken) {
+      const accessResult = await getPaymentRequired(agent.agent_id, walletAddress);
+
+      if (accessResult.status === 'error') {
+        console.log(`\n❌ Access check failed: ${accessResult.error}`);
+        process.exit(1);
+      }
+
+      if (accessResult.status === 'granted' && accessResult.entitlement) {
+        console.log('\n✓ Already purchased! Using existing entitlement.');
+        entitlementToken = accessResult.entitlement.token;
+        expiresAt = accessResult.entitlement.expires_at;
+      }
+    }
+
+    if (!entitlementToken) {
+      // Need to pay — fetch 402 details
+      const accessResult = await getPaymentRequired(agent.agent_id, walletAddress);
+      if (accessResult.status !== 'payment_required') {
+        if (accessResult.status === 'granted') {
+          console.log('\n✓ Access granted (no payment needed).');
+        } else {
+          console.log(`\n❌ Unexpected access status: ${accessResult.status}`);
+          process.exit(1);
+        }
+      } else {
       const paymentRequired = accessResult.payment;
 
       // Check USDC balance
@@ -968,7 +1003,7 @@ async function installAgent(agentId: string, options: { yes?: boolean; pay?: boo
       }
 
       // Confirm payment (skip with --yes or --pay)
-      if (!options.yes && !options.pay) {
+      if (!options.yes) {
         const confirm = await prompt(`\nPay $${paymentRequired.amount} USDC for "${agent.name}"? (y/n) `);
         if (confirm !== 'y' && confirm !== 'yes') {
           console.log('Payment cancelled.');
@@ -1011,9 +1046,7 @@ async function installAgent(agentId: string, options: { yes?: boolean; pay?: boo
         status: 'confirmed',
       });
       saveTxHistory(txHistory);
-    } else if (accessResult.status === 'granted') {
-      // Free agent via access route (model says free)
-      console.log('\n✓ Access granted (no payment needed).');
+      }
     }
   }
 
@@ -1464,7 +1497,7 @@ walletCmd
         process.exit(1);
       }
 
-      const key = await prompt('Enter private key (0x...): ');
+      const key = await promptSecret('Enter private key (0x...): ');
       if (!key.startsWith('0x') || key.length !== 66) {
         console.log('Invalid private key format. Must be a 0x-prefixed 64-character hex string.');
         process.exit(1);
@@ -1477,7 +1510,7 @@ walletCmd
         address: account.address,
         createdAt: new Date().toISOString(),
         network: 'mainnet',
-        rpcEndpoint: MEV_COMMIT_RPC,
+        rpcEndpoint: ETHEREUM_RPC,
         spendLimits: { perTransaction: 100, daily: 500, weekly: 2000 },
         allowedPublishers: [],
       };
