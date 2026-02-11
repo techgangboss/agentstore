@@ -12,11 +12,10 @@ import {
 } from 'viem/accounts';
 import {
   createPublicClient,
-  createWalletClient,
   http,
-  formatEther,
-  parseEther,
-  type Hash,
+  parseAbi,
+  formatUnits,
+  parseUnits,
 } from 'viem';
 import { mainnet } from 'viem/chains';
 import * as keytar from 'keytar';
@@ -28,6 +27,33 @@ const API_BASE = 'https://api.agentstore.tools';
 const MEV_COMMIT_RPC = 'https://fastrpc.mev-commit.xyz';
 const KEYCHAIN_SERVICE = 'agentstore-wallet';
 const KEYCHAIN_ACCOUNT = 'encryption-key';
+
+// USDC contract on Ethereum mainnet
+const USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as const;
+const USDC_DECIMALS = 6;
+const ERC20_BALANCE_ABI = parseAbi([
+  'function balanceOf(address owner) view returns (uint256)',
+]);
+
+// EIP-712 domain for USDC (EIP-3009 transferWithAuthorization)
+const USDC_EIP712_DOMAIN = {
+  name: 'USD Coin',
+  version: '2',
+  chainId: 1,
+  verifyingContract: USDC_ADDRESS,
+} as const;
+
+// EIP-712 types for TransferWithAuthorization
+const TRANSFER_WITH_AUTHORIZATION_TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+} as const;
 
 // File paths
 const HOME_DIR = os.homedir();
@@ -69,7 +95,7 @@ interface EncryptedKeystore {
 interface TransactionRecord {
   txHash: string;
   to: string;
-  amountEth: string;
+  amountUsdc: string;
   amountUsd: number;
   agentId: string;
   timestamp: string;
@@ -403,27 +429,47 @@ async function ensureWalletExists(): Promise<{ address: string; created: boolean
   return { address: account.address, created: true };
 }
 
-// Trigger funding flow and wait for funds
-async function triggerFundingFlow(requiredUsd: number): Promise<boolean> {
+// Get USDC balance for an address
+async function getUsdcBalance(address: string): Promise<bigint> {
+  return publicClient.readContract({
+    address: USDC_ADDRESS,
+    abi: ERC20_BALANCE_ABI,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+  });
+}
+
+// Format USDC from raw bigint (6 decimals) to human-readable string
+function formatUsdc(raw: bigint): string {
+  return formatUnits(raw, USDC_DECIMALS);
+}
+
+// Parse USDC from human-readable string to raw bigint
+function parseUsdc(amount: string | number): bigint {
+  const str = typeof amount === 'number' ? amount.toFixed(USDC_DECIMALS) : amount;
+  return parseUnits(str, USDC_DECIMALS);
+}
+
+// Trigger funding flow and wait for USDC funds
+async function triggerFundingFlow(requiredUsdc: number): Promise<boolean> {
   const config = loadWalletConfig();
   if (!config) return false;
 
-  console.log('\n💳 Opening Coinbase to fund your wallet...\n');
+  console.log('\n💳 Fund your wallet with USDC\n');
   console.log(`   Wallet: ${config.address}`);
-  console.log(`   Required: ~$${requiredUsd} USD\n`);
+  console.log(`   Required: $${requiredUsdc.toFixed(2)} USDC\n`);
 
-  // Get initial balance
-  const initialBalance = await publicClient.getBalance({
-    address: config.address as `0x${string}`,
-  });
+  // Get initial USDC balance
+  const initialBalance = await getUsdcBalance(config.address);
 
-  // Get onramp URL from API
+  // Try to get onramp URL from API
   const response = await fetch(`${API_BASE}/api/onramp/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       wallet_address: config.address,
-      amount_usd: Math.ceil(requiredUsd * 1.1), // Add 10% buffer for gas
+      amount_usd: Math.ceil(requiredUsdc),
+      asset: 'USDC',
     }),
   });
 
@@ -435,19 +481,11 @@ async function triggerFundingFlow(requiredUsd: number): Promise<boolean> {
   };
 
   if (!response.ok || !result.success) {
-    if (result.manual_instructions) {
-      console.log('⚠️  Coinbase Onramp not configured.\n');
-      console.log('   Manual funding instructions:');
-      console.log(`   1. ${result.manual_instructions.step1}`);
-      console.log(`   2. ${result.manual_instructions.step2}`);
-      console.log(`   3. ${result.manual_instructions.step3}`);
-      console.log(`\n   Your wallet address: ${config.address}`);
-      console.log('\n   After funding, run the install command again.');
-    }
+    showFundingOptions(config.address, requiredUsdc);
     return false;
   }
 
-  // Open browser
+  // Open browser for Coinbase onramp
   const { exec } = await import('child_process');
   const openCmd = process.platform === 'darwin'
     ? `open "${result.onramp_url}"`
@@ -457,10 +495,13 @@ async function triggerFundingFlow(requiredUsd: number): Promise<boolean> {
 
   exec(openCmd);
   console.log('🌐 Coinbase opened in your browser.\n');
-  console.log('   Complete the purchase, then wait for funds to arrive.');
-  console.log('⏳ Waiting for funds (Ctrl+C to cancel)...\n');
+  console.log('   Complete the USDC purchase, then wait for funds to arrive.');
+  console.log('   Or use one of the other options below while waiting.\n');
+  showFundingOptionsShort(config.address);
+  console.log('\n⏳ Waiting for USDC (Ctrl+C to cancel)...\n');
 
-  // Poll for balance
+  // Poll for USDC balance
+  const requiredRaw = parseUsdc(requiredUsdc);
   const startTime = Date.now();
   const maxWaitTime = 10 * 60 * 1000; // 10 minutes
   const pollInterval = 10 * 1000; // 10 seconds
@@ -469,43 +510,54 @@ async function triggerFundingFlow(requiredUsd: number): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
 
     try {
-      const currentBalance = await publicClient.getBalance({
-        address: config.address as `0x${string}`,
-      });
+      const currentBalance = await getUsdcBalance(config.address);
 
-      if (currentBalance > initialBalance) {
+      if (currentBalance >= requiredRaw && currentBalance > initialBalance) {
         const added = currentBalance - initialBalance;
-        console.log(`\n✅ Funds received! +${formatEther(added)} ETH\n`);
+        console.log(`\n✅ USDC received! +$${formatUsdc(added)} USDC\n`);
         return true;
       }
 
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      process.stdout.write(`\r   Checking balance... (${elapsed}s elapsed)`);
+      process.stdout.write(`\r   Checking USDC balance... (${elapsed}s elapsed)`);
     } catch {
       // Ignore poll errors
     }
   }
 
-  console.log('\n⚠️  Timeout waiting for funds. Run install again after funding.');
+  console.log('\n⚠️  Timeout waiting for USDC. Run install again after funding.');
   return false;
 }
 
-// Get wallet balance
-async function getWalletBalance(): Promise<{ eth: string; usd: number }> {
+// Show all funding options
+function showFundingOptions(address: string, requiredUsdc: number): void {
+  console.log('   Three ways to fund your wallet:\n');
+  console.log('   1. Buy with card (Coinbase):');
+  console.log('      agentstore wallet fund --wait\n');
+  console.log('   2. Send USDC directly (from any wallet/exchange):');
+  console.log(`      Send $${requiredUsdc.toFixed(2)} USDC (Ethereum) to:`);
+  console.log(`      ${address}\n`);
+  console.log('   3. Import an existing wallet with USDC:');
+  console.log('      agentstore wallet import\n');
+  console.log('   After funding, run the install command again.');
+}
+
+// Short version for inline display
+function showFundingOptionsShort(address: string): void {
+  console.log('   Other ways to add USDC:');
+  console.log(`   - Send USDC (Ethereum) to: ${address}`);
+  console.log('   - Import existing wallet: agentstore wallet import');
+}
+
+// Get wallet balance (USDC)
+async function getWalletBalance(): Promise<{ usdc: string; usdcRaw: bigint }> {
   const config = loadWalletConfig();
   if (!config) throw new Error('Wallet not initialized');
 
-  const balanceWei = await publicClient.getBalance({
-    address: config.address as `0x${string}`,
-  });
-
-  const ethBalance = formatEther(balanceWei);
-  const ethPrice = await getEthPrice();
-  const usdBalance = parseFloat(ethBalance) * ethPrice;
-
+  const raw = await getUsdcBalance(config.address);
   return {
-    eth: ethBalance,
-    usd: Math.round(usdBalance * 100) / 100,
+    usdc: formatUsdc(raw),
+    usdcRaw: raw,
   };
 }
 
@@ -548,120 +600,6 @@ function checkSpendLimit(amountUsd: number, config: WalletConfig, txHistory: Tra
   return { allowed: true };
 }
 
-// Send payment for agent
-async function sendAgentPayment(params: {
-  to: string;
-  amountUsd: number;
-  agentId: string;
-}): Promise<{ txHash: Hash; amountEth: string }> {
-  const config = loadWalletConfig();
-  if (!config) throw new Error('Wallet not initialized');
-
-  const privateKey = await loadPrivateKey();
-  if (!privateKey) throw new Error('Could not load wallet private key');
-
-  const txHistory = loadTxHistory();
-
-  // Check spend limits
-  const limitCheck = checkSpendLimit(params.amountUsd, config, txHistory);
-  if (!limitCheck.allowed) {
-    throw new Error(limitCheck.reason);
-  }
-
-  // Check publisher allowlist
-  if (config.allowedPublishers.length > 0 && !config.allowedPublishers.includes(params.to.toLowerCase())) {
-    throw new Error(`Publisher ${params.to} is not in your allowed publishers list`);
-  }
-
-  // Get current ETH price
-  const ethPrice = await getEthPrice();
-  const amountEth = params.amountUsd / ethPrice;
-  const amountWei = parseEther(amountEth.toFixed(18));
-
-  // Check balance
-  const balance = await getWalletBalance();
-  if (parseFloat(balance.eth) < amountEth) {
-    throw new Error(`Insufficient balance: have ${balance.eth} ETH, need ${amountEth.toFixed(6)} ETH`);
-  }
-
-  // Create wallet client for signing
-  const account = privateKeyToAccount(privateKey);
-  const walletClient = createWalletClient({
-    account,
-    chain: mainnet,
-    transport: http(MEV_COMMIT_RPC),
-  });
-
-  console.log('Sending transaction...');
-
-  // Send transaction
-  const txHash = await walletClient.sendTransaction({
-    to: params.to as `0x${string}`,
-    value: amountWei,
-  });
-
-  // Record transaction
-  const txRecord: TransactionRecord = {
-    txHash,
-    to: params.to,
-    amountEth: amountEth.toFixed(6),
-    amountUsd: params.amountUsd,
-    agentId: params.agentId,
-    timestamp: new Date().toISOString(),
-    status: 'pending',
-  };
-  txHistory.push(txRecord);
-  saveTxHistory(txHistory);
-
-  console.log(`Transaction sent: ${txHash}`);
-
-  // Wait for confirmation
-  try {
-    console.log('Waiting for confirmation...');
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: txHash,
-      confirmations: 2,
-      timeout: 120_000,
-    });
-
-    const txIndex = txHistory.findIndex((tx) => tx.txHash === txHash);
-    const txRecord = txHistory[txIndex];
-    if (txIndex !== -1 && txRecord) {
-      txRecord.status = receipt.status === 'success' ? 'confirmed' : 'failed';
-      saveTxHistory(txHistory);
-    }
-
-    if (receipt.status !== 'success') {
-      throw new Error('Transaction failed on chain');
-    }
-
-    console.log('✓ Transaction confirmed!');
-  } catch (error) {
-    const txIndex = txHistory.findIndex((tx) => tx.txHash === txHash);
-    const txRecord = txHistory[txIndex];
-    if (txIndex !== -1 && txRecord) {
-      txRecord.status = 'failed';
-      saveTxHistory(txHistory);
-    }
-    throw error;
-  }
-
-  return { txHash, amountEth: amountEth.toFixed(6) };
-}
-
-// Get ETH price from CoinGecko
-async function getEthPrice(): Promise<number> {
-  try {
-    const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
-    );
-    const data = (await response.json()) as { ethereum?: { usd?: number } };
-    return data.ethereum?.usd || 2000;
-  } catch {
-    return 2000;
-  }
-}
-
 // Prompt user for confirmation
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({
@@ -676,32 +614,165 @@ function prompt(question: string): Promise<string> {
   });
 }
 
-// Purchase agent via API
-async function purchaseAgent(
+// x402 Payment Required response shape
+interface PaymentRequiredResponse {
+  amount: string;
+  currency: 'USDC';
+  payTo: string;
+  resource: { type: string; agent_id: string; description: string };
+  x402: {
+    version: string;
+    chain_id: number;
+    token: string;
+    facilitator: string;
+    domain: { name: string; version: string; chainId: number; verifyingContract: string };
+  };
+  nonce: string;
+  expires_at: string;
+  fee_split: {
+    platform_address: string;
+    platform_amount: string;
+    platform_percent: number;
+    publisher_address: string;
+    publisher_amount: string;
+    publisher_percent: number;
+  };
+}
+
+// Check agent access — returns entitlement if already purchased, or 402 payment params
+async function getPaymentRequired(
+  agentId: string,
+  walletAddress: string
+): Promise<
+  | { status: 'granted'; entitlement: { token: string; expires_at: string | null } | null; install: unknown }
+  | { status: 'payment_required'; payment: PaymentRequiredResponse }
+  | { status: 'error'; error: string }
+> {
+  try {
+    const response = await fetch(`${API_BASE}/api/agents/${encodeURIComponent(agentId)}/access`, {
+      headers: { 'X-Wallet-Address': walletAddress },
+    });
+
+    if (response.status === 200) {
+      const data = await response.json() as {
+        access: string;
+        entitlement: { token: string; expires_at: string | null } | null;
+        install: unknown;
+      };
+      return { status: 'granted', entitlement: data.entitlement, install: data.install };
+    }
+
+    if (response.status === 402) {
+      const data = await response.json() as { payment: PaymentRequiredResponse };
+      return { status: 'payment_required', payment: data.payment };
+    }
+
+    const data = await response.json() as { error?: string };
+    return { status: 'error', error: data.error || `HTTP ${response.status}` };
+  } catch (error) {
+    return { status: 'error', error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+// Sign EIP-3009 TransferWithAuthorization typed data
+async function signTransferAuthorization(
+  payment: PaymentRequiredResponse,
+  privateKey: `0x${string}`,
+  walletAddress: string
+): Promise<{
+  from: string;
+  to: string;
+  value: string;
+  validAfter: string;
+  validBefore: string;
+  nonce: string;
+  v: number;
+  r: string;
+  s: string;
+}> {
+  const account = privateKeyToAccount(privateKey);
+  const value = parseUsdc(payment.amount);
+  const validBefore = BigInt(Math.floor(new Date(payment.expires_at).getTime() / 1000));
+  const authNonce = ('0x' + crypto.randomBytes(32).toString('hex')) as `0x${string}`;
+
+  const signature = await account.signTypedData({
+    domain: USDC_EIP712_DOMAIN,
+    types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+    primaryType: 'TransferWithAuthorization',
+    message: {
+      from: walletAddress as `0x${string}`,
+      to: payment.payTo as `0x${string}`,
+      value,
+      validAfter: 0n,
+      validBefore,
+      nonce: authNonce,
+    },
+  });
+
+  // Parse signature into v, r, s components
+  const r = ('0x' + signature.slice(2, 66)) as string;
+  const s = ('0x' + signature.slice(66, 130)) as string;
+  const v = parseInt(signature.slice(130, 132), 16);
+
+  return {
+    from: walletAddress,
+    to: payment.payTo,
+    value: value.toString(),
+    validAfter: '0',
+    validBefore: validBefore.toString(),
+    nonce: authNonce,
+    v,
+    r,
+    s,
+  };
+}
+
+// Submit signed x402 payment to API
+async function submitX402Payment(
   agentId: string,
   walletAddress: string,
-  txHash: string
-): Promise<{ entitlement_token: string; expires_at: string | null } | null> {
+  payment: PaymentRequiredResponse,
+  authorization: {
+    from: string; to: string; value: string;
+    validAfter: string; validBefore: string; nonce: string;
+    v: number; r: string; s: string;
+  }
+): Promise<{
+  entitlement_token: string;
+  install: unknown;
+  proof: unknown;
+} | null> {
   try {
-    const response = await fetch(`${API_BASE}/api/purchase`, {
+    const response = await fetch(`${API_BASE}/api/payments/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         agent_id: agentId,
         wallet_address: walletAddress,
-        tx_hash: txHash,
+        payment_required: {
+          amount: payment.amount,
+          currency: payment.currency,
+          payTo: payment.payTo,
+          nonce: payment.nonce,
+          expires_at: payment.expires_at,
+        },
+        authorization,
       }),
     });
 
     if (!response.ok) {
-      const error = (await response.json()) as { error?: string };
-      console.error(`Purchase failed: ${error.error || response.statusText}`);
+      const error = await response.json() as { error?: string };
+      console.error(`Payment failed: ${error.error || response.statusText}`);
       return null;
     }
 
-    return (await response.json()) as { entitlement_token: string; expires_at: string | null };
+    return await response.json() as {
+      entitlement_token: string;
+      install: unknown;
+      proof: unknown;
+    };
   } catch (error) {
-    console.error(`Purchase error: ${error instanceof Error ? error.message : error}`);
+    console.error(`Payment error: ${error instanceof Error ? error.message : error}`);
     return null;
   }
 }
@@ -786,7 +857,7 @@ This is a prompt-based agent. Reference it by asking Claude to follow the instru
 }
 
 // Install command
-async function installAgent(agentId: string, options: { yes?: boolean; txHash?: string; pay?: boolean }): Promise<void> {
+async function installAgent(agentId: string, options: { yes?: boolean; pay?: boolean }): Promise<void> {
   ensureDirectories();
 
   console.log(`Fetching agent: ${agentId}...`);
@@ -826,119 +897,123 @@ async function installAgent(agentId: string, options: { yes?: boolean; txHash?: 
   }
   console.log('└─────────────────────────────────────────────────┘');
 
-  // For paid agents, handle payment flow
+  // For paid agents, handle x402 USDC payment flow
   let entitlementToken: string | null = null;
   let expiresAt: string | null = null;
 
   if (agent.type === 'proprietary' && agent.pricing.model !== 'free') {
-    // Lazy wallet creation - create if doesn't exist
+    const priceUsd = getPriceUsd(agent.pricing);
+
+    // Lazy wallet creation
     const { address: walletAddress, created: walletCreated } = await ensureWalletExists();
     if (walletCreated) {
       console.log('\n🔐 Wallet created automatically');
       console.log(`   Address: ${walletAddress}`);
     }
 
-    const wallet = loadWalletConfig()!;
-    const ethPrice = await getEthPrice();
-    const priceEth = getPriceUsd(agent.pricing) / ethPrice;
-
     console.log('\n💰 Payment Required:');
-    console.log(`   Price: $${getPriceUsd(agent.pricing)} (~${priceEth.toFixed(6)} ETH)`);
-    console.log(`   Your wallet: ${wallet.address}`);
-    console.log(`   ETH Price: $${ethPrice}`);
+    console.log(`   Price: $${priceUsd.toFixed(2)} USDC`);
+    console.log(`   Your wallet: ${walletAddress}`);
 
-    // Check if already purchased
-    const entitlements = loadEntitlements();
-    const existing = entitlements.find((e) => e.agentId === agent.agent_id);
-    if (existing) {
+    // Check access status (entitlement or 402)
+    const accessResult = await getPaymentRequired(agent.agent_id, walletAddress);
+
+    if (accessResult.status === 'error') {
+      console.log(`\n❌ Access check failed: ${accessResult.error}`);
+      process.exit(1);
+    }
+
+    if (accessResult.status === 'granted' && accessResult.entitlement) {
       console.log('\n✓ Already purchased! Using existing entitlement.');
-      entitlementToken = existing.token;
-      expiresAt = existing.expiresAt;
-    } else {
-      let txHash = options.txHash;
+      entitlementToken = accessResult.entitlement.token;
+      expiresAt = accessResult.entitlement.expires_at;
+    } else if (accessResult.status === 'payment_required') {
+      const paymentRequired = accessResult.payment;
 
-      // Direct payment with --pay flag
-      if (options.pay && !txHash) {
-        const payoutAddress = agent.publisher.payout_address;
-        if (!payoutAddress) {
-          console.log('\n❌ Publisher has no payout address configured.');
-          console.log('   Contact the publisher or use --tx-hash with manual payment.');
-          process.exit(1);
-        }
+      // Check USDC balance
+      try {
+        const balance = await getWalletBalance();
+        const requiredRaw = parseUsdc(paymentRequired.amount);
+        console.log(`   Your USDC balance: $${balance.usdc}`);
 
-        // Check balance and trigger funding if needed
-        try {
-          const balance = await getWalletBalance();
-          console.log(`\n   Your balance: ${balance.eth} ETH ($${balance.usd})`);
+        if (balance.usdcRaw < requiredRaw) {
+          console.log(`\n⚠️  Insufficient USDC. Need $${paymentRequired.amount}, have $${balance.usdc}`);
 
-          // Auto-trigger funding flow if insufficient balance
-          if (balance.usd < getPriceUsd(agent.pricing)) {
-            console.log(`\n⚠️  Insufficient balance. Need $${getPriceUsd(agent.pricing)}, have $${balance.usd}`);
-
-            const funded = await triggerFundingFlow(getPriceUsd(agent.pricing));
-            if (!funded) {
-              process.exit(1);
-            }
-
-            // Re-check balance after funding
-            const newBalance = await getWalletBalance();
-            console.log(`   New balance: ${newBalance.eth} ETH ($${newBalance.usd})`);
-
-            if (newBalance.usd < getPriceUsd(agent.pricing)) {
-              console.log(`\n❌ Still insufficient. Need $${getPriceUsd(agent.pricing)}, have $${newBalance.usd}`);
-              process.exit(1);
-            }
+          const funded = await triggerFundingFlow(priceUsd);
+          if (!funded) {
+            process.exit(1);
           }
-        } catch (error) {
-          console.log(`\n❌ Could not check balance: ${error instanceof Error ? error.message : error}`);
-          process.exit(1);
-        }
 
-        // Confirm payment
-        if (!options.yes) {
-          const confirm = await prompt(`\nPay $${getPriceUsd(agent.pricing)} (~${priceEth.toFixed(6)} ETH) to ${payoutAddress.slice(0, 10)}...? (y/n) `);
-          if (confirm !== 'y' && confirm !== 'yes') {
-            console.log('Payment cancelled.');
-            process.exit(0);
+          // Re-check balance after funding
+          const newBalance = await getWalletBalance();
+          console.log(`   New USDC balance: $${newBalance.usdc}`);
+
+          if (newBalance.usdcRaw < requiredRaw) {
+            console.log(`\n❌ Still insufficient. Need $${paymentRequired.amount}, have $${newBalance.usdc}`);
+            process.exit(1);
           }
         }
-
-        // Send payment
-        try {
-          console.log('\n🔄 Processing payment...');
-          const payment = await sendAgentPayment({
-            to: payoutAddress,
-            amountUsd: getPriceUsd(agent.pricing),
-            agentId: agent.agent_id,
-          });
-          txHash = payment.txHash;
-          console.log(`✓ Payment sent: ${txHash}`);
-        } catch (error) {
-          console.log(`\n❌ Payment failed: ${error instanceof Error ? error.message : error}`);
-          process.exit(1);
-        }
-      }
-
-      // Verify payment with API
-      if (!txHash) {
-        console.log('\n💳 Payment options:');
-        console.log('   1. Auto-pay: agentstore install ' + agent.agent_id + ' --pay');
-        console.log('   2. Manual:   Send ' + priceEth.toFixed(6) + ' ETH to ' + (agent.publisher.payout_address || '[publisher]'));
-        console.log('                Then: agentstore install ' + agent.agent_id + ' --tx-hash 0x...');
+      } catch (error) {
+        console.log(`\n❌ Could not check balance: ${error instanceof Error ? error.message : error}`);
         process.exit(1);
       }
 
-      console.log('\nVerifying payment with marketplace...');
-      const purchase = await purchaseAgent(agent.agent_id, wallet.address, txHash);
-
-      if (!purchase) {
-        console.log('❌ Payment verification failed.');
+      // Check spend limits
+      const config = loadWalletConfig()!;
+      const txHistory = loadTxHistory();
+      const limitCheck = checkSpendLimit(priceUsd, config, txHistory);
+      if (!limitCheck.allowed) {
+        console.log(`\n❌ Spend limit exceeded: ${limitCheck.reason}`);
         process.exit(1);
       }
 
-      entitlementToken = purchase.entitlement_token;
-      expiresAt = purchase.expires_at;
-      console.log('✓ Payment verified!');
+      // Confirm payment (skip with --yes or --pay)
+      if (!options.yes && !options.pay) {
+        const confirm = await prompt(`\nPay $${paymentRequired.amount} USDC for "${agent.name}"? (y/n) `);
+        if (confirm !== 'y' && confirm !== 'yes') {
+          console.log('Payment cancelled.');
+          process.exit(0);
+        }
+      }
+
+      // Sign the EIP-3009 authorization
+      const privateKey = await loadPrivateKey();
+      if (!privateKey) {
+        console.log('\n❌ Could not load wallet private key');
+        process.exit(1);
+      }
+
+      console.log('\n🔐 Signing USDC authorization...');
+      const authorization = await signTransferAuthorization(paymentRequired, privateKey, walletAddress);
+
+      // Submit to API for facilitator relay
+      console.log('🔄 Processing payment via x402...');
+      const result = await submitX402Payment(agent.agent_id, walletAddress, paymentRequired, authorization);
+
+      if (!result) {
+        console.log('❌ Payment processing failed.');
+        process.exit(1);
+      }
+
+      entitlementToken = result.entitlement_token;
+      expiresAt = null;
+      console.log('✓ Payment confirmed! (gasless USDC via x402)');
+
+      // Record in local tx history
+      const txProof = result.proof as { tx_hash?: string } | undefined;
+      txHistory.push({
+        txHash: txProof?.tx_hash || 'x402-' + Date.now(),
+        to: paymentRequired.payTo,
+        amountUsdc: paymentRequired.amount,
+        amountUsd: priceUsd,
+        agentId: agent.agent_id,
+        timestamp: new Date().toISOString(),
+        status: 'confirmed',
+      });
+      saveTxHistory(txHistory);
+    } else if (accessResult.status === 'granted') {
+      // Free agent via access route (model says free)
+      console.log('\n✓ Access granted (no payment needed).');
     }
   }
 
@@ -1176,9 +1251,8 @@ program
 program
   .command('install <agent_id>')
   .description('Install an agent from the marketplace')
-  .option('-y, --yes', 'Skip confirmation / force reinstall')
-  .option('--pay', 'Pay for agent directly from wallet')
-  .option('--tx-hash <hash>', 'Transaction hash for manual payment verification')
+  .option('-y, --yes', 'Skip confirmation / auto-confirm payment')
+  .option('--pay', 'Auto-confirm payment (alias for --yes)')
   .action(installAgent);
 
 program
@@ -1247,7 +1321,7 @@ program
       }
 
       console.log('Install with: agentstore install <agent_id>');
-      console.log('For paid agents: agentstore install <agent_id> --pay');
+      console.log('Paid agents prompt for USDC payment automatically.');
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : error}`);
       process.exit(1);
@@ -1275,8 +1349,11 @@ walletCmd
       const { address } = await createNewWallet();
       console.log('\n✅ Wallet created!');
       console.log(`\nAddress: ${address}`);
-      console.log('\n⚠️  Fund this address with ETH to purchase paid agents.');
-      console.log('   Use any exchange or wallet to send ETH to this address.');
+      console.log('\n⚠️  Fund this address with USDC to purchase paid agents.');
+      console.log('   Options:');
+      console.log('   1. Buy with card: agentstore wallet fund');
+      console.log(`   2. Send USDC (Ethereum) from any wallet to: ${address}`);
+      console.log('   3. Import existing wallet: agentstore wallet import');
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : error}`);
       process.exit(1);
@@ -1285,7 +1362,7 @@ walletCmd
 
 walletCmd
   .command('balance')
-  .description('Show wallet balance')
+  .description('Show wallet USDC balance')
   .action(async () => {
     try {
       if (!walletExists()) {
@@ -1294,11 +1371,12 @@ walletCmd
       }
 
       const config = loadWalletConfig();
-      console.log(`\nAddress: ${config?.address}`);
+      console.log(`\nWallet: ${config?.address}`);
 
-      console.log('Fetching balance...');
+      console.log('Fetching USDC balance...');
       const balance = await getWalletBalance();
-      console.log(`\n💰 Balance: ${balance.eth} ETH (~$${balance.usd})`);
+      console.log(`USDC Balance: $${balance.usdc}`);
+      console.log('Network: Ethereum Mainnet');
 
       // Show spending stats
       const txHistory = loadTxHistory();
@@ -1348,7 +1426,7 @@ walletCmd
         const date = new Date(tx.timestamp).toLocaleDateString();
         const statusIcon = tx.status === 'confirmed' ? '✓' : tx.status === 'pending' ? '⏳' : '✗';
         console.log(`  ${statusIcon} ${date} | ${tx.agentId}`);
-        console.log(`    ${tx.amountEth} ETH ($${tx.amountUsd}) → ${tx.to.slice(0, 10)}...`);
+        console.log(`    $${tx.amountUsdc || tx.amountUsd} USDC → ${tx.to.slice(0, 10)}...`);
         console.log(`    ${tx.txHash.slice(0, 20)}...`);
         console.log();
       }
@@ -1377,11 +1455,57 @@ walletCmd
   });
 
 walletCmd
+  .command('import')
+  .description('Import an existing wallet by private key')
+  .action(async () => {
+    try {
+      if (walletExists()) {
+        console.log('Wallet already exists. Delete ~/.agentstore/wallet.* files to import a new one.');
+        process.exit(1);
+      }
+
+      const key = await prompt('Enter private key (0x...): ');
+      if (!key.startsWith('0x') || key.length !== 66) {
+        console.log('Invalid private key format. Must be a 0x-prefixed 64-character hex string.');
+        process.exit(1);
+      }
+
+      ensureDirectories();
+      const account = privateKeyToAccount(key as `0x${string}`);
+
+      const config: WalletConfig = {
+        address: account.address,
+        createdAt: new Date().toISOString(),
+        network: 'mainnet',
+        rpcEndpoint: MEV_COMMIT_RPC,
+        spendLimits: { perTransaction: 100, daily: 500, weekly: 2000 },
+        allowedPublishers: [],
+      };
+
+      const password = await getOrCreatePassword();
+      const encrypted = encryptKey(key, password);
+
+      fs.writeFileSync(KEYSTORE_FILE, JSON.stringify(encrypted), { mode: 0o600 });
+      fs.writeFileSync(WALLET_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+      fs.writeFileSync(TX_HISTORY_FILE, JSON.stringify([]), { mode: 0o600 });
+
+      // Show USDC balance
+      const usdcRaw = await getUsdcBalance(account.address);
+      console.log(`\n✅ Wallet imported!`);
+      console.log(`   Address: ${account.address}`);
+      console.log(`   USDC Balance: $${formatUsdc(usdcRaw)}`);
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+  });
+
+walletCmd
   .command('fund')
-  .description('Fund your wallet with a credit card via Coinbase')
+  .description('Fund your wallet with USDC')
   .option('-a, --amount <usd>', 'Amount in USD to purchase', parseFloat)
   .option('--no-open', 'Print URL instead of opening browser')
-  .option('--wait', 'Wait and poll for funds to arrive')
+  .option('--wait', 'Wait and poll for USDC to arrive')
   .action(async (options: { amount?: number; open?: boolean; wait?: boolean }) => {
     try {
       if (!walletExists()) {
@@ -1395,24 +1519,20 @@ walletCmd
         process.exit(1);
       }
 
-      console.log('\n💳 Coinbase Onramp - Fund Your Wallet\n');
+      console.log('\n💳 Fund Your Wallet with USDC\n');
       console.log(`   Wallet: ${config.address}`);
 
-      // Get initial balance for comparison
+      // Get initial USDC balance for comparison
       let initialBalance: bigint | undefined;
-      if (options.wait) {
-        try {
-          initialBalance = await publicClient.getBalance({
-            address: config.address as `0x${string}`,
-          });
-          console.log(`   Current balance: ${formatEther(initialBalance)} ETH`);
-        } catch {
-          // Ignore balance fetch errors
-        }
+      try {
+        initialBalance = await getUsdcBalance(config.address);
+        console.log(`   Current USDC: $${formatUsdc(initialBalance)}`);
+      } catch {
+        // Ignore balance fetch errors
       }
 
       if (options.amount) {
-        console.log(`   Amount: $${options.amount} USD`);
+        console.log(`   Amount: $${options.amount} USDC`);
       }
 
       console.log('\n🔄 Generating secure onramp session...');
@@ -1424,6 +1544,7 @@ walletCmd
         body: JSON.stringify({
           wallet_address: config.address,
           amount_usd: options.amount,
+          asset: 'USDC',
         }),
       });
 
@@ -1437,34 +1558,18 @@ walletCmd
       };
 
       if (!response.ok || !result.success) {
-        // Handle fallback for when CDP credentials aren't configured
-        if (result.manual_instructions) {
-          console.log('\n⚠️  Coinbase Onramp not configured on server.\n');
-          console.log('   Manual funding instructions:');
-          console.log(`   1. ${result.manual_instructions.step1}`);
-          console.log(`   2. ${result.manual_instructions.step2}`);
-          console.log(`   3. ${result.manual_instructions.step3}`);
-          console.log(`\n   Your wallet address: ${config.address}`);
-        } else {
-          console.log(`\n❌ Error: ${result.error || result.message || 'Unknown error'}`);
-          if (result.fallback) {
-            console.log(`\n   ${result.fallback.message}`);
-            console.log(`   1. ${result.fallback.step1}`);
-            console.log(`   2. ${result.fallback.step2}`);
-          }
-        }
+        console.log('\n⚠️  Coinbase Onramp unavailable.\n');
+        showFundingOptions(config.address, options.amount || 10);
         process.exit(1);
       }
 
       const onrampUrl = result.onramp_url!;
 
       if (options.open === false) {
-        // Just print the URL
         console.log('\n✅ Onramp URL generated:\n');
         console.log(`   ${onrampUrl}\n`);
-        console.log('   Open this URL in your browser to complete the purchase.');
+        console.log('   Open this URL in your browser to purchase USDC.');
       } else {
-        // Open in default browser
         console.log('\n🌐 Opening Coinbase in your browser...\n');
 
         const { exec } = await import('child_process');
@@ -1481,13 +1586,14 @@ walletCmd
           }
         });
 
-        console.log('   Complete the purchase in your browser.');
-        console.log('   ETH will be sent to your wallet within a few minutes.\n');
+        console.log('   Complete the USDC purchase in your browser.');
+        console.log('   USDC will arrive in your wallet within a few minutes.\n');
+        showFundingOptionsShort(config.address);
       }
 
-      // Poll for balance changes if --wait flag is set
+      // Poll for USDC balance changes if --wait flag is set
       if (options.wait && initialBalance !== undefined) {
-        console.log('⏳ Waiting for funds to arrive (Ctrl+C to cancel)...\n');
+        console.log('\n⏳ Waiting for USDC to arrive (Ctrl+C to cancel)...\n');
 
         const startTime = Date.now();
         const maxWaitTime = 10 * 60 * 1000; // 10 minutes
@@ -1497,29 +1603,25 @@ walletCmd
           await new Promise((resolve) => setTimeout(resolve, pollInterval));
 
           try {
-            const currentBalance = await publicClient.getBalance({
-              address: config.address as `0x${string}`,
-            });
+            const currentBalance = await getUsdcBalance(config.address);
 
             if (currentBalance > initialBalance) {
               const added = currentBalance - initialBalance;
-              const ethPrice = await getEthPrice();
-              const addedUsd = parseFloat(formatEther(added)) * ethPrice;
 
-              console.log('✅ Funds received!\n');
-              console.log(`   Added: ${formatEther(added)} ETH (~$${addedUsd.toFixed(2)})`);
-              console.log(`   New balance: ${formatEther(currentBalance)} ETH`);
+              console.log('\n✅ USDC received!\n');
+              console.log(`   Added: $${formatUsdc(added)} USDC`);
+              console.log(`   New balance: $${formatUsdc(currentBalance)} USDC`);
               process.exit(0);
             }
 
             const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            process.stdout.write(`\r   Checking... (${elapsed}s elapsed)`);
+            process.stdout.write(`\r   Checking USDC... (${elapsed}s elapsed)`);
           } catch {
             // Ignore individual poll errors
           }
         }
 
-        console.log('\n\n⚠️  Timed out waiting for funds.');
+        console.log('\n\n⚠️  Timed out waiting for USDC.');
         console.log('   Funds may still arrive - check your balance later with:');
         console.log('   agentstore wallet balance\n');
       }
