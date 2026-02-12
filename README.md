@@ -1,14 +1,23 @@
+<div align="center">
+
 # AgentStore
+
+**The open-source marketplace for Claude Code plugins with gasless USDC payments.**
+
+Publish in 3 API calls. Earn 80% revenue. No approval process.
 
 [![npm](https://img.shields.io/npm/v/agentstore)](https://www.npmjs.com/package/agentstore)
 [![npm downloads](https://img.shields.io/npm/dm/agentstore)](https://www.npmjs.com/package/agentstore)
 [![GitHub stars](https://img.shields.io/github/stars/techgangboss/agentstore)](https://github.com/techgangboss/agentstore/stargazers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node 18+](https://img.shields.io/badge/node-18%2B-green.svg)](https://nodejs.org/)
 
-The open-source marketplace for Claude Code plugins. Publish instantly, earn USDC, no approval process.
+**[Website](https://agentstore.tools)** | **[API Docs](https://api.agentstore.tools/api)** | **[Dashboard](https://agentstore.tools/dashboard)** | **[npm](https://www.npmjs.com/package/agentstore)**
 
-**[Website](https://agentstore.tools)** | **[API Docs](https://api.agentstore.tools/api)** | **[Dashboard](https://agentstore.tools/dashboard)** | **[Submit Agent](https://agentstore.tools/submit)** | **[npm](https://www.npmjs.com/package/agentstore)**
+<img src=".github/x402-flow.jpeg" alt="AgentStore x402 Payment Flow" width="700" />
+
+*Agents sign one USDC authorization. The facilitator handles gas. API access unlocked in under 200ms.*
+
+</div>
 
 ---
 
